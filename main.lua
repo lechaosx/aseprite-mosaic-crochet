@@ -10,34 +10,37 @@ local function getLayerByName(sprite, name)
 	return nil
 end
 
-local function isMainColorRound(sprite, x, y)
+local function getRowIndex(sprite, y)
+	return sprite.height - 1 - y
+end
+
+local function getRoundIndex(sprite, x, y)
 	local centerX = math.floor(sprite.width / 2)
 	local centerY = math.floor(sprite.height / 2)
 	local dx = math.abs(x - centerX)
 	local dy = math.abs(y - centerY)
 	local round = math.max(dx, dy)
-	if round == 0 then return nil end -- Center pixel is transparent/special
-
-	local innerRadius = sprite.properties.innerRadius or 0
-	return (round - innerRadius) % 2 == 1, round
+	return round
 end
 
-local function isMainColorRow(sprite, y)
-	return (sprite.height - 1 - y) % 2 == 1
-end
-
-local function isMainColor(color)
-	return color == 0
+local function getColorIndex(index)
+	return index % 2 == 1 and 0 or 1
 end
 
 local function normalizeImage(sprite, image)
+	local palette = sprite.palettes[1]
+	local paletteSize = #palette
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
 			local pixelValue = image:getPixel(x, y)
 			if pixelValue > 1 then
-				local color = sprite.palettes[1]:getColor(pixelValue)
-				local brightness = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
-				pixelValue = (brightness > 127) and 0 or 1
+				if pixelValue < paletteSize then
+					local color = palette:getColor(pixelValue)
+					local brightness = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
+					pixelValue = (brightness > 127) and 0 or 1
+				else
+					pixelValue = 1
+				end
 				image:drawPixel(x, y, pixelValue)
 			end
 		end
@@ -46,17 +49,17 @@ end
 
 local function updateRowHighlights(sprite, cel, highlightImage)
 	for y = 0, sprite.height - 1 do
+		local colorIndex = getColorIndex(getRowIndex(sprite, y))
 		for x = 0, sprite.width - 1 do
 			local pixelValue = cel.image:getPixel(x, y)
-			local isMainRow = isMainColorRow(sprite, y)
-			local mainColorMatch = (isMainRow == isMainColor(pixelValue))
+			local mainColorMatch = (colorIndex == pixelValue)
 
 			if not mainColorMatch then
 				if y <= 0 or y >= sprite.height - 1 then
 					highlightImage:drawPixel(x, y, 3) -- Invalid
 				else
 					local innerPixel = cel.image:getPixel(x, y + 1)
-					if isMainRow == isMainColor(innerPixel) then
+					if colorIndex == innerPixel then
 						highlightImage:drawPixel(x, y, 3)
 					else
 						highlightImage:drawPixel(x, y, 2)
@@ -74,21 +77,19 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 	cel.image:drawPixel(centerX, centerY, -1) -- Keep center pixel transparent
 
 	for y = 0, sprite.height - 1 do
+        local dy = math.abs(y - centerY)
+
 		for x = 0, sprite.width - 1 do
 			if x == centerX and y == centerY then
 				goto continue
 			end
 
-			local pixelValue = cel.image:getPixel(x, y)
-			local isMain, round = isMainColorRound(sprite, x, y)
-			local mainColorMatch = (isMain == isMainColor(pixelValue))
+			local round = getRoundIndex(sprite, x, y)
+			local colorIndex = getColorIndex(round)
 
-			local dx = math.abs(x - centerX)
-			local dy = math.abs(y - centerY)
-			local isCorner = (dx == round and dy == round)
-
-			if not mainColorMatch then
-				if isCorner then
+			if colorIndex ~= cel.image:getPixel(x, y) then
+				local dx = math.abs(x - centerX)
+				if dx == round and dy == round then
 					highlightImage:drawPixel(x, y, 3) -- Invalid
 				else
 					-- Find inner round coordinates for checking DC
@@ -96,18 +97,12 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 					if dx > dy then
 						innerX = (x > centerX) and (x - 1) or (x + 1)
 						innerY = y
-					elseif dy > dx then
+					else
 						innerX = x
-						innerY = (y > centerY) and (y - 1) or (y + 1)
-					else -- Corner (already handled by isCorner, but kept for completeness if logic changes)
-						innerX = (x > centerX) and (x - 1) or (x + 1)
 						innerY = (y > centerY) and (y - 1) or (y + 1)
 					end
 
-					local innerPixel = cel.image:getPixel(innerX, innerY)
-					-- In center mode, DC checks the same pixel's color in the inner round.
-					-- The rule is "checks more inner round", which for a DC means it must be different from current round's color.
-					if isMain == isMainColor(innerPixel) then
+					if colorIndex == cel.image:getPixel(innerX, innerY) then
 						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
 						highlightImage:drawPixel(x, y, 2) -- Valid DC
@@ -222,18 +217,15 @@ local function createMosaicSprite()
 
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
-			local colorIndex
-			if data.mode == "center" then
-				local isMain, round = isMainColorRound(sprite, x, y)
-				if round == 0 then
-					colorIndex = -1 -- Transparent
-				else
-					colorIndex = isMain and 0 or 1
-				end
+			local index
+
+			if sprite.properties.mosaicMode == "center" then
+				index = getRoundIndex(sprite, x, y)
 			else
-				colorIndex = isMainColorRow(sprite, y) and 0 or 1
+				index = getRowIndex(sprite, y)
 			end
-			cel.image:putPixel(x, y, colorIndex)
+
+			cel.image:putPixel(x, y, getColorIndex(index))
 		end
 	end
 
@@ -243,6 +235,8 @@ local function createMosaicSprite()
 	sprite.events:on('change', function(ev)
 		updateHighlights(sprite)
 	end)
+
+	updateHighlights(sprite)
 end
 
 function init(plugin)
