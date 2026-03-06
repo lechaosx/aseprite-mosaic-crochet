@@ -20,11 +20,12 @@ local function getRoundIndex(sprite, x, y)
 	local dx = math.abs(x - centerX)
 	local dy = math.abs(y - centerY)
 	local round = math.max(dx, dy)
-	return round
+	local innerRadius = sprite.properties.innerRadius or 0
+	return round - innerRadius
 end
 
 local function getColorIndex(index)
-	return index % 2 == 1 and 0 or 1
+	return index % 2 == 0 and 0 or 1
 end
 
 local function normalizeImage(sprite, image)
@@ -73,23 +74,29 @@ end
 local function updateCenterHighlights(sprite, cel, highlightImage)
 	local centerX = math.floor(sprite.width / 2)
 	local centerY = math.floor(sprite.height / 2)
+	local innerRadius = sprite.properties.innerRadius or 0
 
-	cel.image:drawPixel(centerX, centerY, -1) -- Keep center pixel transparent
+	for y = centerY - innerRadius, centerY + innerRadius do
+		for x = centerX - innerRadius, centerX + innerRadius do
+			cel.image:drawPixel(x, y, -1)
+		end
+	end
 
 	for y = 0, sprite.height - 1 do
-        local dy = math.abs(y - centerY)
+		local dy = math.abs(y - centerY)
 
 		for x = 0, sprite.width - 1 do
-			if x == centerX and y == centerY then
+			local dx = math.abs(x - centerX)
+			local roundDist = math.max(dx, dy)
+
+			if roundDist <= innerRadius then
 				goto continue
 			end
 
-			local round = getRoundIndex(sprite, x, y)
-			local colorIndex = getColorIndex(round)
+			local colorIndex = getColorIndex(roundDist - innerRadius)
 
 			if colorIndex ~= cel.image:getPixel(x, y) then
-				local dx = math.abs(x - centerX)
-				if dx == round and dy == round then
+				if dx == dy then
 					highlightImage:drawPixel(x, y, 3) -- Invalid
 				else
 					-- Find inner round coordinates for checking DC
@@ -156,21 +163,19 @@ end
 
 local function createMosaicSprite()
 	local dlg = Dialog("New Mosaic Pattern")
-	dlg:combobox{ id="mode", label="Mode:", options={ "row", "center" }, selected="row" }
-	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
-	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
-	   :number{ id="innerRadius", label="Inner Radius:", decimals=0, text="0", visible=false }
-	   :number{ id="rounds", label="Rounds:", decimals=0, text="5", visible=false }
-	   :button{ id="ok", text="OK" }
-	   :button{ id="cancel", text="Cancel" }
-
-	dlg:modify{ id="mode", onchange=function()
+	dlg:combobox{ id="mode", label="Mode:", options={ "row", "center" }, selected="row", onchange=function()
 		local isCenter = (dlg.data.mode == "center")
 		dlg:modify{ id="width", visible = not isCenter }
 		dlg:modify{ id="height", visible = not isCenter }
 		dlg:modify{ id="innerRadius", visible = isCenter }
 		dlg:modify{ id="rounds", visible = isCenter }
 	end }
+	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
+	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
+	   :number{ id="innerRadius", label="Inner Radius:", decimals=0, text="0", visible=false }
+	   :number{ id="rounds", label="Rounds:", decimals=0, text="5", visible=false }
+	   :button{ id="ok", text="OK" }
+	   :button{ id="cancel", text="Cancel" }
 
 	dlg:show()
 
@@ -217,15 +222,28 @@ local function createMosaicSprite()
 
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
-			local index
+			local colorIdx
 
 			if sprite.properties.mosaicMode == "center" then
-				index = getRoundIndex(sprite, x, y)
+				local centerX = math.floor(sprite.width / 2)
+				local centerY = math.floor(sprite.height / 2)
+				local dx = math.abs(x - centerX)
+				local dy = math.abs(y - centerY)
+				local roundDist = math.max(dx, dy)
+				local innerRadius = sprite.properties.innerRadius or 0
+
+				if roundDist <= innerRadius then
+					colorIdx = -1
+				else
+					local round = roundDist - innerRadius
+					colorIdx = getColorIndex(round)
+				end
 			else
-				index = getRowIndex(sprite, y)
+				local index = getRowIndex(sprite, y)
+				colorIdx = getColorIndex(index)
 			end
 
-			cel.image:putPixel(x, y, getColorIndex(index))
+			cel.image:putPixel(x, y, colorIdx)
 		end
 	end
 
