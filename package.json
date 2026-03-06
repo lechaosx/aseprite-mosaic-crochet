@@ -1,0 +1,14 @@
+{
+  "name": "mosaic-helper",
+  "displayName": "Inset Mosaic Crochet Helper",
+  "description": "Highlights DC stitches and invalid DC placements for inset mosaic crochet.",
+  "version": "0.1",
+  "author": { "name": "lechaosx" },
+  "publisher": "lechaosx",
+  "license": "MIT",
+  "contributes": {
+    "scripts": [
+      { "path": "./main.lua" }
+    ]
+  }
+}
