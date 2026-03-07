@@ -75,6 +75,7 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 	local centerX = math.floor(sprite.width / 2)
 	local centerY = math.floor(sprite.height / 2)
 	local innerRadius = sprite.properties.innerRadius or 0
+	local maxRoundDist = math.max(centerX, centerY)
 
 	for y = centerY - innerRadius, centerY + innerRadius do
 		for x = centerX - innerRadius, centerX + innerRadius do
@@ -96,7 +97,7 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 			local colorIndex = getColorIndex(roundDist - innerRadius)
 
 			if colorIndex ~= cel.image:getPixel(x, y) then
-				if dx == dy then
+				if dx == dy or roundDist == maxRoundDist then
 					highlightImage:drawPixel(x, y, 3) -- Invalid
 				else
 					-- Find inner round coordinates for checking DC
@@ -164,11 +165,10 @@ end
 local function createMosaicSprite()
 	local dlg = Dialog("New Mosaic Pattern")
 	dlg:combobox{ id="mode", label="Mode:", options={ "row", "center" }, selected="row", onchange=function()
-		local isCenter = (dlg.data.mode == "center")
-		dlg:modify{ id="width", visible = not isCenter }
-		dlg:modify{ id="height", visible = not isCenter }
-		dlg:modify{ id="innerRadius", visible = isCenter }
-		dlg:modify{ id="rounds", visible = isCenter }
+		dlg:modify{ id="width", visible = dlg.data.mode == "row" }
+		dlg:modify{ id="height", visible = dlg.data.mode == "row" }
+		dlg:modify{ id="innerRadius", visible = dlg.data.mode == "center" }
+		dlg:modify{ id="rounds", visible = dlg.data.mode == "center" }
 	end }
 	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
 	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
