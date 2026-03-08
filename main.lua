@@ -14,18 +14,23 @@ local function getRowIndex(sprite, y)
 	return sprite.height - 1 - y
 end
 
+local function roundDistanceToRoundIndex(sprite, roundDistance)
+	return roundDistance - sprite.properties.innerRadius - 1
+end
+
 local function getRoundIndex(sprite, x, y)
 	local centerX = math.floor(sprite.width / 2)
 	local centerY = math.floor(sprite.height / 2)
 	local dx = math.abs(x - centerX)
 	local dy = math.abs(y - centerY)
-	local round = math.max(dx, dy)
-	local innerRadius = sprite.properties.innerRadius or 0
-	return round - innerRadius
+	local roundDistance = math.max(dx, dy)
+	return roundDistanceToRoundIndex(sprite, roundDistance)
 end
 
+
+
 local function getColorIndex(index)
-	return index % 2 == 0 and 0 or 1
+	return index % 2 == 0 and 1 or 0
 end
 
 local function normalizeImage(sprite, image)
@@ -88,34 +93,31 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 
 		for x = 0, sprite.width - 1 do
 			local dx = math.abs(x - centerX)
+
 			local roundDist = math.max(dx, dy)
 
-			if roundDist <= innerRadius then
-				goto continue
-			end
+			if roundDist > innerRadius then
+				local colorIndex = getColorIndex(roundDistanceToRoundIndex(sprite, roundDist))
 
-			local colorIndex = getColorIndex(roundDist - innerRadius)
-
-			if colorIndex ~= cel.image:getPixel(x, y) then
-				if dx == dy or roundDist == maxRoundDist then
-					highlightImage:drawPixel(x, y, 3) -- Invalid
-				else
-					-- Determine direction towards the center
-					local stepX, stepY = 0, 0
-					if dx > dy then
-						stepX = (x > centerX) and -1 or 1
-					else
-						stepY = (y > centerY) and -1 or 1
-					end
-
-					if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
+				if colorIndex ~= cel.image:getPixel(x, y) then
+					if dx == dy or roundDist == maxRoundDist then
 						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
-						highlightImage:drawPixel(x - stepX, y - stepY, 2) -- Valid overlay, highlight round ABOVE
+						local stepX, stepY = 0, 0
+						if dx > dy then
+							stepX = (x > centerX) and -1 or 1
+						else
+							stepY = (y > centerY) and -1 or 1
+						end
+
+						if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
+							highlightImage:drawPixel(x, y, 3) -- Invalid
+						else
+							highlightImage:drawPixel(x - stepX, y - stepY, 2) -- Valid overlay, highlight round ABOVE
+						end
 					end
 				end
 			end
-			::continue::
 		end
 	end
 end
@@ -263,18 +265,11 @@ local function createMosaicSprite()
 			local colorIdx
 
 			if sprite.properties.mosaicMode == "center" then
-				local centerX = math.floor(sprite.width / 2)
-				local centerY = math.floor(sprite.height / 2)
-				local dx = math.abs(x - centerX)
-				local dy = math.abs(y - centerY)
-				local roundDist = math.max(dx, dy)
-				local innerRadius = sprite.properties.innerRadius or 0
-
-				if roundDist <= innerRadius then
+				local roundIdx = getRoundIndex(sprite, x, y)
+				if roundIdx < 0 then
 					colorIdx = -1
 				else
-					local round = roundDist - innerRadius
-					colorIdx = getColorIndex(round)
+					colorIdx = getColorIndex(roundIdx)
 				end
 			else
 				local index = getRowIndex(sprite, y)
