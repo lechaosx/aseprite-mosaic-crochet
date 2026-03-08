@@ -17,7 +17,7 @@ This Aseprite plugin provides real-time highlights for overlay stitches and inva
 1. Open Aseprite.
 2. Go to **Edit > Preferences > Extensions**.
 3. Click **Add Extension** and select the folder containing this plugin, or drag and drop the `.aseprite-extension` file if available.
-4. Alternatively, place the `mosaic-helper` folder into your Aseprite extensions directory.
+4. Alternatively, place the `aseprite-mosaic-crochet` folder into your Aseprite extensions directory.
 
 ## Usage
 
@@ -49,3 +49,7 @@ This Aseprite plugin provides real-time highlights for overlay stitches and inva
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENCE.md) for details.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of changes.
