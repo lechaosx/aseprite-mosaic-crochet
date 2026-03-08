@@ -122,6 +122,9 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 	end
 end
 
+local activeCrochetSprite = nil
+local crochetChangeCallback = nil
+
 local function updateHighlights(sprite)
 	-- Recompute when user tries to draw on mosaic highlight
 	if app.activeLayer.name ~= "Crochet Pattern" and app.activeLayer.name ~= "Mosaic Highlights" then
@@ -160,6 +163,43 @@ local function updateHighlights(sprite)
 	end
 
 	app.refresh()
+end
+
+-- Reattaches the crochet pattern's change callback to the current active sprite.
+-- If app.sprite is nil or not a mosaic crochet pattern, it just detaches current listener.
+-- This automatically detaches from any previous sprite.
+local function reattachCrochetCallbacks()
+	local sprite = app.sprite
+	-- No-op if the sprite is already active and same as before.
+	if activeCrochetSprite == sprite and sprite ~= nil then
+		return
+	end
+
+	-- Detach current crochet pattern's change callback if it exists.
+	-- This ensures that only the active sprite has an active listener, preventing "zombie" listeners.
+	if activeCrochetSprite and crochetChangeCallback then
+		-- Aseprite's Events:off() requires the exact function reference to remove it.
+		activeCrochetSprite.events:off(crochetChangeCallback)
+	end
+	activeCrochetSprite = nil
+	crochetChangeCallback = nil
+
+	-- If new sprite doesn't have mosaicMode, we just finished detaching.
+	if not sprite or not sprite.properties.mosaicMode then
+		return
+	end
+
+	-- Store the callback function reference for future detachment.
+	crochetChangeCallback = function(ev)
+		updateHighlights(sprite)
+	end
+
+	-- Start listening to changes on the new sprite.
+	sprite.events:on('change', crochetChangeCallback)
+	activeCrochetSprite = sprite
+
+	-- Run an initial update immediately when the sprite is first attached.
+	updateHighlights(sprite)
 end
 
 local function createMosaicSprite()
@@ -250,18 +290,23 @@ local function createMosaicSprite()
 	app.fgColor = white
 	app.bgColor = black
 
-	sprite.events:on('change', function(ev)
-		updateHighlights(sprite)
-	end)
-
-	updateHighlights(sprite)
+	reattachCrochetCallbacks()
 end
 
 function init(plugin)
+	-- Register the command to create a new mosaic crochet sprite.
 	plugin:newCommand{
 		id="new_mosaic_sprite",
 		title="New Mosaic Crochet Sprite",
 		group="file_new",
 		onclick=createMosaicSprite
 	}
+
+	-- Listen for site changes (switching between sprites or closing files).
+	-- This keeps the real-time highlights synced with the currently focused sprite.
+	app.events:on('sitechange', reattachCrochetCallbacks)
+
+	-- If a mosaic crochet sprite is already open when the plugin is loaded or reloaded,
+	-- ensure its highlights and callbacks are initialized immediately.
+	reattachCrochetCallbacks()
 end
