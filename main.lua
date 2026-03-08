@@ -61,9 +61,9 @@ local function updateRowHighlights(sprite, cel, highlightImage)
 				else
 					local innerPixel = cel.image:getPixel(x, y + 1)
 					if colorIndex == innerPixel then
-						highlightImage:drawPixel(x, y, 3)
+						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
-						highlightImage:drawPixel(x, y, 2)
+						highlightImage:drawPixel(x, y - 1, 2) -- Valid DC, highlight row ABOVE
 					end
 				end
 			end
@@ -113,7 +113,17 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 					if colorIndex == cel.image:getPixel(innerX, innerY) then
 						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
-						highlightImage:drawPixel(x, y, 2) -- Valid DC
+						-- Find outer round coordinates for highlighting DC
+						local outerX, outerY
+						if dx > dy then
+							outerX = (x > centerX) and (x + 1) or (x - 1)
+							outerY = y
+						else
+							outerX = x
+							outerY = (y > centerY) and (y + 1) or (y - 1)
+						end
+
+						highlightImage:drawPixel(outerX, outerY, 2) -- Valid DC, highlight round ABOVE
 					end
 				end
 			end
