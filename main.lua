@@ -1,5 +1,5 @@
 -- Inset Mosaic Crochet Helper
--- Real-time highlights for DC stitches and invalid DC placements for inset mosaic crochet.
+-- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
 
 local function getLayerByName(sprite, name)
 	for _, l in ipairs(sprite.layers) do
@@ -63,7 +63,7 @@ local function updateRowHighlights(sprite, cel, highlightImage)
 					if colorIndex == innerPixel then
 						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
-						highlightImage:drawPixel(x, y - 1, 2) -- Valid DC, highlight row ABOVE
+						highlightImage:drawPixel(x, y - 1, 2) -- Valid overlay, highlight row ABOVE
 					end
 				end
 			end
@@ -100,30 +100,18 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 				if dx == dy or roundDist == maxRoundDist then
 					highlightImage:drawPixel(x, y, 3) -- Invalid
 				else
-					-- Find inner round coordinates for checking DC
-					local innerX, innerY
+					-- Determine direction towards the center
+					local stepX, stepY = 0, 0
 					if dx > dy then
-						innerX = (x > centerX) and (x - 1) or (x + 1)
-						innerY = y
+						stepX = (x > centerX) and -1 or 1
 					else
-						innerX = x
-						innerY = (y > centerY) and (y - 1) or (y + 1)
+						stepY = (y > centerY) and -1 or 1
 					end
 
-					if colorIndex == cel.image:getPixel(innerX, innerY) then
+					if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
 						highlightImage:drawPixel(x, y, 3) -- Invalid
 					else
-						-- Find outer round coordinates for highlighting DC
-						local outerX, outerY
-						if dx > dy then
-							outerX = (x > centerX) and (x + 1) or (x - 1)
-							outerY = y
-						else
-							outerX = x
-							outerY = (y > centerY) and (y + 1) or (y - 1)
-						end
-
-						highlightImage:drawPixel(outerX, outerY, 2) -- Valid DC, highlight round ABOVE
+						highlightImage:drawPixel(x - stepX, y - stepY, 2) -- Valid overlay, highlight round ABOVE
 					end
 				end
 			end
