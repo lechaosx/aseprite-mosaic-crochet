@@ -42,27 +42,28 @@ local function getRoundIndex(sprite, x, y)
 	return roundDistanceToRoundIndex(sprite, roundDistance)
 end
 
-
-
 local function getColorIndex(index)
 	return index % 2 == 0 and COLOR_A or COLOR_B
+end
+
+local function getColorDistance(c1, c2)
+    return (c1.red - c2.red)^2 + (c1.green - c2.green)^2 + (c1.blue - c2.blue)^2
 end
 
 local function normalizeImage(sprite, image)
 	local palette = sprite.palettes[1]
 	local paletteSize = #palette
+	local colorA = palette:getColor(COLOR_A)
+	local colorB = palette:getColor(COLOR_B)
+
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
 			local pixelValue = image:getPixel(x, y)
-			if pixelValue > COLOR_B then
-				if pixelValue < paletteSize then
-					local color = palette:getColor(pixelValue)
-					local brightness = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
-					pixelValue = (brightness > 127) and COLOR_A or COLOR_B
-				else
-					pixelValue = COLOR_B
-				end
-				image:drawPixel(x, y, pixelValue)
+			if pixelValue ~= COLOR_A and pixelValue ~= COLOR_B then
+                local color = palette:getColor(pixelValue)
+                local distA = getColorDistance(color, colorA)
+                local distB = getColorDistance(color, colorB)
+				image:drawPixel(x, y, (distA <= distB) and COLOR_A or COLOR_B)
 			end
 		end
 	end
