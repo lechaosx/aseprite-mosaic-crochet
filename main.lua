@@ -200,8 +200,8 @@ local function reattachCrochetCallbacks()
 	activeCrochetSprite = nil
 	crochetChangeCallback = nil
 
-	-- If new sprite doesn't have mosaicMode, we just finished detaching.
-	if not sprite or not sprite.properties.mosaicMode then
+	-- If new sprite doesn't have mosaicMode or is not in INDEXED color mode, we just finished detaching.
+	if not sprite or not sprite.properties.mosaicMode or sprite.colorMode ~= ColorMode.INDEXED then
 		return
 	end
 
