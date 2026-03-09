@@ -1,11 +1,20 @@
 -- Inset Mosaic Crochet Helper
 -- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
 
+-- Colors
 local COLOR_TRANSPARENT = 0
 local COLOR_A = 1
 local COLOR_B = 2
 local HIGHLIGHT_VALID_OVERLAY = 3
 local HIGHLIGHT_INVALID_PLACEMENT = 4
+
+-- Layer names
+local LAYER_PATTERN = "Crochet Pattern"
+local LAYER_HIGHLIGHTS = "Mosaic Highlights"
+
+-- Mosaic modes
+local MODE_ROW = "row"
+local MODE_CENTER = "center"
 
 local function getLayerByName(sprite, name)
 	for _, l in ipairs(sprite.layers) do
@@ -133,11 +142,11 @@ local crochetChangeCallback = nil
 
 local function updateHighlights(sprite)
 	-- Recompute when user tries to draw on mosaic highlight
-	if app.activeLayer.name ~= "Crochet Pattern" and app.activeLayer.name ~= "Mosaic Highlights" then
+	if app.activeLayer.name ~= LAYER_PATTERN and app.activeLayer.name ~= LAYER_HIGHLIGHTS then
 		return
 	end
 
-	local patternLayer = getLayerByName(sprite, "Crochet Pattern")
+	local patternLayer = getLayerByName(sprite, LAYER_PATTERN)
 	if not patternLayer then return end
 
 	local cel = patternLayer:cel(app.activeFrame)
@@ -145,16 +154,16 @@ local function updateHighlights(sprite)
 
 	normalizeImage(sprite, cel.image)
 
-	local highlightLayer = getLayerByName(sprite, "Mosaic Highlights")
+	local highlightLayer = getLayerByName(sprite, LAYER_HIGHLIGHTS)
 	if not highlightLayer then
 		highlightLayer = sprite:newLayer()
-		highlightLayer.name = "Mosaic Highlights"
+		highlightLayer.name = LAYER_HIGHLIGHTS
 		highlightLayer.opacity = 127
 		app.activeLayer = patternLayer
 	end
 
 	local highlightImage = Image(sprite.spec)
-	if sprite.properties.mosaicMode == "center" then
+	if sprite.properties.mosaicMode == MODE_CENTER then
 		updateCenterHighlights(sprite, cel, highlightImage)
 	else
 		updateRowHighlights(sprite, cel, highlightImage)
@@ -201,7 +210,7 @@ local function reattachCrochetCallbacks()
 	end
 
 	-- Start listening to changes on the new sprite.
-	sprite.events:on('change', crochetChangeCallback)
+	sprite.events:on("change", crochetChangeCallback)
 	activeCrochetSprite = sprite
 
 	-- Run an initial update immediately when the sprite is first attached.
@@ -210,11 +219,11 @@ end
 
 local function createMosaicSprite()
 	local dlg = Dialog("New Mosaic Pattern")
-	dlg:combobox{ id="mode", label="Mode:", options={ "row", "center" }, selected="row", onchange=function()
-		dlg:modify{ id="width", visible = dlg.data.mode == "row" }
-		dlg:modify{ id="height", visible = dlg.data.mode == "row" }
-		dlg:modify{ id="innerRadius", visible = dlg.data.mode == "center" }
-		dlg:modify{ id="rounds", visible = dlg.data.mode == "center" }
+	dlg:combobox{ id="mode", label="Mode:", options={ MODE_ROW, MODE_CENTER }, selected=MODE_ROW, onchange=function()
+		dlg:modify{ id="width", visible = dlg.data.mode == MODE_ROW }
+		dlg:modify{ id="height", visible = dlg.data.mode == MODE_ROW }
+		dlg:modify{ id="innerRadius", visible = dlg.data.mode == MODE_CENTER }
+		dlg:modify{ id="rounds", visible = dlg.data.mode == MODE_CENTER }
 	end }
 	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
 	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
@@ -229,7 +238,7 @@ local function createMosaicSprite()
 	if not data.ok then return end
 
 	local width, height
-	if data.mode == "center" then
+	if data.mode == MODE_CENTER then
 		width = (data.innerRadius + data.rounds) * 2 + 1
 		height = width
 	else
@@ -246,11 +255,11 @@ local function createMosaicSprite()
 
 	local sprite = Sprite(spec)
 	sprite.properties.mosaicMode = data.mode
-	if data.mode == "center" then
+	if data.mode == MODE_CENTER then
 		sprite.properties.innerRadius = data.innerRadius
 	end
 
-	sprite.layers[1].name = "Crochet Pattern"
+	sprite.layers[1].name = LAYER_PATTERN
 
 	sprite.palettes[1]:resize(5)
 	sprite.palettes[1]:setColor(COLOR_TRANSPARENT, Color(0, 0, 0, 0))
@@ -266,7 +275,7 @@ local function createMosaicSprite()
 		for x = 0, sprite.width - 1 do
 			local colorIdx
 
-			if sprite.properties.mosaicMode == "center" then
+			if sprite.properties.mosaicMode == MODE_CENTER then
 				local roundIdx = getRoundIndex(sprite, x, y)
 				if roundIdx < 0 then
 					colorIdx = COLOR_TRANSPARENT
@@ -299,7 +308,7 @@ function init(plugin)
 
 	-- Listen for site changes (switching between sprites or closing files).
 	-- This keeps the real-time highlights synced with the currently focused sprite.
-	app.events:on('sitechange', reattachCrochetCallbacks)
+	app.events:on("sitechange", reattachCrochetCallbacks)
 
 	-- If a mosaic crochet sprite is already open when the plugin is loaded or reloaded,
 	-- ensure its highlights and callbacks are initialized immediately.
