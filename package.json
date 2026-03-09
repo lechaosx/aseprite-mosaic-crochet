@@ -2,7 +2,7 @@
   "name": "aseprite-mosaic-crochet",
   "displayName": "Inset Mosaic Crochet Helper",
   "description": "Highlights overlay stitches and invalid overlay placements for inset mosaic crochet.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": { "name": "Drahomír Dlabaja" },
   "publisher": "Drahomír Dlabaja",
   "license": "MIT",
