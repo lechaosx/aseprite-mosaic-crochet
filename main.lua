@@ -142,7 +142,10 @@ local activeCrochetSprite = nil
 local crochetChangeCallback = nil
 
 local function updateHighlights(sprite)
-	-- Recompute when user tries to draw on mosaic highlight
+    if sprite.colorMode ~= ColorMode.INDEXED then
+        return
+    end
+
 	if app.activeLayer.name ~= LAYER_PATTERN and app.activeLayer.name ~= LAYER_HIGHLIGHTS then
 		return
 	end
