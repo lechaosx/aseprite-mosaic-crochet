@@ -1,6 +1,12 @@
 -- Inset Mosaic Crochet Helper
 -- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
 
+local COLOR_TRANSPARENT = 0
+local COLOR_A = 1
+local COLOR_B = 2
+local HIGHLIGHT_VALID_OVERLAY = 3
+local HIGHLIGHT_INVALID_PLACEMENT = 4
+
 local function getLayerByName(sprite, name)
 	for _, l in ipairs(sprite.layers) do
 		if l.name == name then
@@ -30,7 +36,7 @@ end
 
 
 local function getColorIndex(index)
-	return index % 2 == 0 and 1 or 0
+	return index % 2 == 0 and COLOR_A or COLOR_B
 end
 
 local function normalizeImage(sprite, image)
@@ -39,13 +45,13 @@ local function normalizeImage(sprite, image)
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
 			local pixelValue = image:getPixel(x, y)
-			if pixelValue > 1 then
+			if pixelValue > COLOR_B then
 				if pixelValue < paletteSize then
 					local color = palette:getColor(pixelValue)
 					local brightness = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
-					pixelValue = (brightness > 127) and 0 or 1
+					pixelValue = (brightness > 127) and COLOR_A or COLOR_B
 				else
-					pixelValue = 1
+					pixelValue = COLOR_B
 				end
 				image:drawPixel(x, y, pixelValue)
 			end
@@ -62,13 +68,13 @@ local function updateRowHighlights(sprite, cel, highlightImage)
 
 			if not mainColorMatch then
 				if y <= 0 or y >= sprite.height - 1 then
-					highlightImage:drawPixel(x, y, 3) -- Invalid
+					highlightImage:drawPixel(x, y, HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 				else
 					local innerPixel = cel.image:getPixel(x, y + 1)
 					if colorIndex == innerPixel then
-						highlightImage:drawPixel(x, y, 3) -- Invalid
+						highlightImage:drawPixel(x, y, HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 					else
-						highlightImage:drawPixel(x, y - 1, 2) -- Valid overlay, highlight row ABOVE
+						highlightImage:drawPixel(x, y - 1, HIGHLIGHT_VALID_OVERLAY) -- Valid overlay, highlight row ABOVE
 					end
 				end
 			end
@@ -84,7 +90,7 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 
 	for y = centerY - innerRadius, centerY + innerRadius do
 		for x = centerX - innerRadius, centerX + innerRadius do
-			cel.image:drawPixel(x, y, -1)
+			cel.image:drawPixel(x, y, COLOR_TRANSPARENT)
 		end
 	end
 
@@ -101,7 +107,7 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 
 				if colorIndex ~= cel.image:getPixel(x, y) then
 					if dx == dy or roundDist == maxRoundDist then
-						highlightImage:drawPixel(x, y, 3) -- Invalid
+						highlightImage:drawPixel(x, y, HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 					else
 						local stepX, stepY = 0, 0
 						if dx > dy then
@@ -111,9 +117,9 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 						end
 
 						if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
-							highlightImage:drawPixel(x, y, 3) -- Invalid
+							highlightImage:drawPixel(x, y, HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 						else
-							highlightImage:drawPixel(x - stepX, y - stepY, 2) -- Valid overlay, highlight round ABOVE
+							highlightImage:drawPixel(x - stepX, y - stepY, HIGHLIGHT_VALID_OVERLAY) -- Valid overlay, highlight round ABOVE
 						end
 					end
 				end
@@ -231,16 +237,11 @@ local function createMosaicSprite()
 		height = data.height
 	end
 
-	local white = Color(255, 255, 255, 255)
-	local black = Color(0, 0, 0, 255)
-	local blue = Color(0, 0, 255, 255)
-	local red = Color(255, 0, 0, 255)
-
 	local spec = ImageSpec{
 		width=width,
 		height=height,
 		colorMode=ColorMode.INDEXED,
-		transparentColor=-1
+		transparentColor=COLOR_TRANSPARENT
 	}
 
 	local sprite = Sprite(spec)
@@ -251,11 +252,12 @@ local function createMosaicSprite()
 
 	sprite.layers[1].name = "Crochet Pattern"
 
-	sprite.palettes[1]:resize(4)
-	sprite.palettes[1]:setColor(0, white)
-	sprite.palettes[1]:setColor(1, black)
-	sprite.palettes[1]:setColor(2, blue)
-	sprite.palettes[1]:setColor(3, red)
+	sprite.palettes[1]:resize(5)
+	sprite.palettes[1]:setColor(COLOR_TRANSPARENT, Color(0, 0, 0, 0))
+	sprite.palettes[1]:setColor(COLOR_A, Color(0, 0, 0, 255))
+	sprite.palettes[1]:setColor(COLOR_B, Color(255, 255, 255, 255))
+	sprite.palettes[1]:setColor(HIGHLIGHT_VALID_OVERLAY, Color(0, 0, 255, 255))
+	sprite.palettes[1]:setColor(HIGHLIGHT_INVALID_PLACEMENT, Color(255, 0, 0, 255))
 
 	local patternLayer = sprite.layers[1]
 	local cel = sprite:newCel(patternLayer, 1)
@@ -267,7 +269,7 @@ local function createMosaicSprite()
 			if sprite.properties.mosaicMode == "center" then
 				local roundIdx = getRoundIndex(sprite, x, y)
 				if roundIdx < 0 then
-					colorIdx = -1
+					colorIdx = COLOR_TRANSPARENT
 				else
 					colorIdx = getColorIndex(roundIdx)
 				end
