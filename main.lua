@@ -295,8 +295,8 @@ local function createMosaicSprite()
 		end
 	end
 
-	app.fgColor = white
-	app.bgColor = black
+	app.fgColor = COLOR_A
+	app.bgColor = COLOR_B
 
 	reattachCrochetCallbacks()
 end
