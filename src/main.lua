@@ -1,5 +1,5 @@
 local common = require("src.common")
--- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
+local export = require("src.export")
 
 -- Helper functions moved to common.lua
 local function getLayerByName(sprite, name)
@@ -60,7 +60,7 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 	local centerX = math.floor(sprite.width / 2)
 	local centerY = math.floor(sprite.height / 2)
 	local innerRadius = sprite.properties.innerRadius or 0
-	local maxRoundDist = math.max(centerX, centerY)
+	local maxRoundDist = centerX
 
 	for y = centerY - innerRadius, centerY + innerRadius do
 		for x = centerX - innerRadius, centerX + innerRadius do
@@ -148,9 +148,119 @@ local function updateHighlights(sprite)
 	app.refresh()
 end
 
--- Reattaches the crochet pattern's change callback to the current active sprite.
--- If app.sprite is nil or not a mosaic crochet pattern, it just detaches current listener.
--- This automatically detaches from any previous sprite.
+local function isCrochetable(sprite)
+	local highlightLayer = getLayerByName(sprite, common.LAYER_HIGHLIGHTS)
+	if not highlightLayer then
+		return true -- If no highlight layer, assume it's okay (or maybe warn? but request said check if crochetable)
+	end
+	local highlightCel = highlightLayer:cel(app.activeFrame)
+	if not highlightCel then
+		return true
+	end
+	local image = highlightCel.image
+	for it in image:pixels() do
+		local pixelValue = it()
+		if pixelValue == common.HIGHLIGHT_INVALID_PLACEMENT then
+			return false
+		end
+	end
+	return true
+end
+
+local function exportToTxt()
+	local sprite = app.sprite
+	if not sprite or not sprite.properties.mosaicMode or sprite.colorMode ~= ColorMode.INDEXED then
+		app.alert("Not a mosaic crochet pattern sprite!")
+		return
+	end
+
+	-- Before dialog, check if the pattern is crochetable at all.
+	if not isCrochetable(sprite) then
+		app.alert("Pattern is not crochetable! Please fix invalid placements (red highlights) before exporting.")
+		return
+	end
+
+	local patternLayer = getLayerByName(sprite, common.LAYER_PATTERN)
+	if not patternLayer then
+		app.alert("Crochet Pattern layer not found!")
+		return
+	end
+
+	local cel = patternLayer:cel(app.activeFrame)
+	if not cel then
+		app.alert("No pattern found in the active frame!")
+		return
+	end
+
+	local dlg = Dialog("Export Mosaic Pattern")
+	dlg:combobox{ id="direction", label="Direction:", options={ "Same Direction", "Altering Directions" }, selected="Same Direction" }
+	dlg:file{ id="file", label="Save to:", filename="pattern.txt", save=true, filetypes={"txt"} }
+	   :button{ id="ok", text="OK" }
+	   :button{ id="cancel", text="Cancel" }
+
+	dlg:show()
+
+	local data = dlg.data
+	if not data.ok or not data.file or data.file == "" then return end
+
+	local highlightLayer = getLayerByName(sprite, common.LAYER_HIGHLIGHTS)
+	local highlightCel = highlightLayer and highlightLayer:cel(app.activeFrame) or nil
+
+	local sameDirection = (data.direction == "Same Direction")
+
+	local params = {
+		sprite = sprite,
+		cel = cel,
+		highlightCel = highlightCel,
+		sameDirection = sameDirection
+	}
+
+	local resultData = {}
+	if sprite.properties.mosaicMode == common.MODE_CENTER then
+		resultData = export.exportCenter(params)
+	else
+		resultData = export.exportRow(params)
+	end
+
+	local function serializeStitch(item)
+		if item.type == "stitch" then
+			return item.stitch
+		elseif item.type == "group" then
+			local serializedStitches = {}
+			for _, stitch in ipairs(item.stitches) do
+				table.insert(serializedStitches, serializeStitch(stitch))
+			end
+			return "(" .. table.concat(serializedStitches, ", ") .. ")"
+		elseif item.type == "repeat" then
+			local serializedStitches = {}
+			for _, stitch in ipairs(item.stitches) do
+				table.insert(serializedStitches, serializeStitch(stitch))
+			end
+			return "[" .. table.concat(serializedStitches, ", ") .. "] x " .. tostring(item.repeats)
+		end
+
+		error("Unknown export item type: " .. tostring(item.type))
+	end
+
+	local label = (sprite.properties.mosaicMode == common.MODE_CENTER) and "Round " or "Row "
+	local result = ""
+	for _, item in ipairs(resultData) do
+		local serializedStitches = {}
+		for _, stitch in ipairs(item.stitches) do
+			table.insert(serializedStitches, serializeStitch(stitch))
+		end
+		result = result .. label .. item.index .. ": " .. table.concat(serializedStitches, ", ") .. "\n"
+	end
+
+	local f = io.open(data.file, "w")
+	if f then
+		f:write(result)
+		f:close()
+	else
+		app.alert("Failed to open file for writing!")
+	end
+end
+
 local function reattachCrochetCallbacks()
 	local sprite = app.sprite
 	-- No-op if the sprite is already active and same as before.
