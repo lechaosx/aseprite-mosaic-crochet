@@ -81,3 +81,13 @@ test("getRoundIndex ring indices in 16x6 r=3", function()
 	assert(common.getRoundIndex(16, 6, 3, 8,  3) == 0) -- innermost (symmetric row)
 	assert(common.getRoundIndex(16, 6, 3, 15, 5) == 2) -- outermost far corner
 end)
+
+test("getRoundFromEdge same on both sides of zero-dimension seam in 16x6 r=3", function()
+	-- For innerHeight=0, rows 2 and 3 are the innermost ring on opposite sides of the
+	-- virtual seam. getRoundFromEdge must return the same value for both so the highlight
+	-- logic can detect the seam crossing and allow overlays on the innermost ring.
+	for x = 0, 15 do
+		assert(common.getRoundFromEdge(16, 6, x, 2) == common.getRoundFromEdge(16, 6, x, 3),
+			string.format("seam mismatch at x=%d", x))
+	end
+end)

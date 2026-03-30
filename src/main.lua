@@ -92,7 +92,13 @@ local function updateCenterHighlights(sprite, cel, highlightImage)
 							stepY = (y * 2 >= sprite.height) and -1 or 1
 						end
 
-						if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
+						local nx, ny = x + stepX, y + stepY
+						local neighborRFE = common.getRoundFromEdge(sprite.width, sprite.height, nx, ny)
+
+						if neighborRFE <= roundFromEdge then
+							-- Step crossed the seam of a zero-dimension inner hole; overlay is always valid
+							highlightImage:drawPixel(x - stepX, y - stepY, common.HIGHLIGHT_VALID_OVERLAY)
+						elseif colorIndex == cel.image:getPixel(nx, ny) then
 							highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 						else
 							highlightImage:drawPixel(x - stepX, y - stepY, common.HIGHLIGHT_VALID_OVERLAY) -- Valid overlay, highlight round ABOVE
