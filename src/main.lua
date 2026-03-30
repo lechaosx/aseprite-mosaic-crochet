@@ -295,13 +295,6 @@ function init(plugin)
 		onclick=createMosaicSprite
 	}
 
-	plugin:newCommand{
-		id="export_mosaic_to_txt",
-		title="Export Mosaic to TXT",
-		group="file_export",
-		onclick=exportToTxt
-	}
-
 	-- Listen for site changes (switching between sprites or closing files).
 	-- This keeps the real-time highlights synced with the currently focused sprite.
 	app.events:on("sitechange", reattachCrochetCallbacks)
