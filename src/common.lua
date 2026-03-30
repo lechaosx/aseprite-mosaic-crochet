@@ -19,21 +19,19 @@ function M.getColorIndex(index)
 	return index % 2 == 0 and M.COLOR_A or M.COLOR_B
 end
 
-function M.getRowIndex(sprite, y)
-	return sprite.height - 1 - y
+function M.getRowIndex(height, y)
+	return height - 1 - y
 end
 
-function M.roundDistanceToRoundIndex(sprite, roundDistance)
-	return roundDistance - (sprite.properties.innerRadius or 0) - 1
+function M.getRoundFromEdge(width, height, x, y)
+	local minDistX = math.min(x, width - 1 - x)
+	local minDistY = math.min(y, height - 1 - y)
+	return math.min(minDistX, minDistY)
 end
 
-function M.getRoundIndex(sprite, x, y)
-	local centerX = math.floor(sprite.width / 2)
-	local centerY = math.floor(sprite.height / 2)
-	local dx = math.abs(x - centerX)
-	local dy = math.abs(y - centerY)
-	local roundDistance = math.max(dx, dy)
-	return M.roundDistanceToRoundIndex(sprite, roundDistance)
+function M.getRoundIndex(width, height, rounds, x, y)
+	local roundFromEdge = M.getRoundFromEdge(width, height, x, y)
+	return rounds - 1 - roundFromEdge
 end
 
 return M

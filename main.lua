@@ -35,7 +35,7 @@ end
 
 local function updateRowHighlights(sprite, cel, highlightImage)
 	for y = 0, sprite.height - 1 do
-		local colorIndex = common.getColorIndex(common.getRowIndex(sprite, y))
+		local colorIndex = common.getColorIndex(common.getRowIndex(sprite.height, y))
 		for x = 0, sprite.width - 1 do
 			local pixelValue = cel.image:getPixel(x, y)
 			local mainColorMatch = (colorIndex == pixelValue)
@@ -57,37 +57,39 @@ local function updateRowHighlights(sprite, cel, highlightImage)
 end
 
 local function updateCenterHighlights(sprite, cel, highlightImage)
-	local centerX = math.floor(sprite.width / 2)
-	local centerY = math.floor(sprite.height / 2)
-	local innerRadius = sprite.properties.innerRadius or 0
-	local maxRoundDist = math.max(centerX, centerY)
+	local rounds = sprite.properties.rounds
 
-	for y = centerY - innerRadius, centerY + innerRadius do
-		for x = centerX - innerRadius, centerX + innerRadius do
-			cel.image:drawPixel(x, y, common.COLOR_TRANSPARENT)
+	for y = 0, sprite.height - 1 do
+		for x = 0, sprite.width - 1 do
+			local minDistX = math.min(x, sprite.width - 1 - x)
+			local minDistY = math.min(y, sprite.height - 1 - y)
+			local roundFromEdge = math.min(minDistX, minDistY)
+
+			if roundFromEdge >= rounds then
+				cel.image:drawPixel(x, y, common.COLOR_TRANSPARENT)
+			end
 		end
 	end
 
 	for y = 0, sprite.height - 1 do
-		local dy = math.abs(y - centerY)
-
 		for x = 0, sprite.width - 1 do
-			local dx = math.abs(x - centerX)
+			local minDistX = math.min(x, sprite.width - 1 - x)
+			local minDistY = math.min(y, sprite.height - 1 - y)
+			local roundFromEdge = math.min(minDistX, minDistY)
 
-			local roundDist = math.max(dx, dy)
-
-			if roundDist > innerRadius then
-				local colorIndex = common.getColorIndex(common.roundDistanceToRoundIndex(sprite, roundDist))
+			if roundFromEdge < rounds then
+				local roundIndex = rounds - 1 - roundFromEdge
+				local colorIndex = common.getColorIndex(roundIndex)
 
 				if colorIndex ~= cel.image:getPixel(x, y) then
-					if dx == dy or roundDist == maxRoundDist then
+					if minDistX == minDistY or roundFromEdge == 0 then
 						highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
 					else
 						local stepX, stepY = 0, 0
-						if dx > dy then
-							stepX = (x > centerX) and -1 or 1
+						if minDistX < minDistY then
+							stepX = (x * 2 >= sprite.width) and -1 or 1
 						else
-							stepY = (y > centerY) and -1 or 1
+							stepY = (y * 2 >= sprite.height) and -1 or 1
 						end
 
 						if colorIndex == cel.image:getPixel(x + stepX, y + stepY) then
@@ -172,6 +174,17 @@ local function reattachCrochetCallbacks()
 		return
 	end
 
+	-- BACKWARD COMPAT (v1 -> v2): old sprites stored innerRadius but not rounds.
+	-- Derive rounds from image size: old formula was size = (innerRadius + rounds) * 2 + 1.
+	-- Delete this block in v2.
+	if sprite.properties.mosaicMode == common.MODE_CENTER
+		and sprite.properties.innerRadius ~= nil
+		and sprite.properties.rounds == nil then
+		local innerRadius = sprite.properties.innerRadius
+		sprite.properties.rounds = (sprite.width - 1) / 2 - innerRadius
+		sprite.properties.innerRadius = nil
+	end
+
 	-- Store the callback function reference for future detachment.
 	crochetChangeCallback = function(ev)
 		updateHighlights(sprite)
@@ -190,12 +203,14 @@ local function createMosaicSprite()
 	dlg:combobox{ id="mode", label="Mode:", options={ common.MODE_ROW, common.MODE_CENTER }, selected=common.MODE_ROW, onchange=function()
 		dlg:modify{ id="width", visible = dlg.data.mode == common.MODE_ROW }
 		dlg:modify{ id="height", visible = dlg.data.mode == common.MODE_ROW }
-		dlg:modify{ id="innerRadius", visible = dlg.data.mode == common.MODE_CENTER }
+		dlg:modify{ id="innerWidth", visible = dlg.data.mode == common.MODE_CENTER }
+		dlg:modify{ id="innerHeight", visible = dlg.data.mode == common.MODE_CENTER }
 		dlg:modify{ id="rounds", visible = dlg.data.mode == common.MODE_CENTER }
 	end }
 	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
 	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
-	   :number{ id="innerRadius", label="Inner Radius:", decimals=0, text="0", visible=false }
+	   :number{ id="innerWidth", label="Inner Width:", decimals=0, text="3", visible=false }
+	   :number{ id="innerHeight", label="Inner Height:", decimals=0, text="3", visible=false }
 	   :number{ id="rounds", label="Rounds:", decimals=0, text="5", visible=false }
 	   :button{ id="ok", text="OK" }
 	   :button{ id="cancel", text="Cancel" }
@@ -207,8 +222,8 @@ local function createMosaicSprite()
 
 	local width, height
 	if data.mode == common.MODE_CENTER then
-		width = (data.innerRadius + data.rounds) * 2 + 1
-		height = width
+		width = data.innerWidth + data.rounds * 2
+		height = data.innerHeight + data.rounds * 2
 	else
 		width = data.width
 		height = data.height
@@ -224,7 +239,7 @@ local function createMosaicSprite()
 	local sprite = Sprite(spec)
 	sprite.properties.mosaicMode = data.mode
 	if data.mode == common.MODE_CENTER then
-		sprite.properties.innerRadius = data.innerRadius
+		sprite.properties.rounds = data.rounds
 	end
 
 	sprite.layers[1].name = common.LAYER_PATTERN
@@ -244,14 +259,14 @@ local function createMosaicSprite()
 			local colorIdx
 
 			if sprite.properties.mosaicMode == common.MODE_CENTER then
-				local roundIdx = common.getRoundIndex(sprite, x, y)
+				local roundIdx = common.getRoundIndex(sprite.width, sprite.height, sprite.properties.rounds, x, y)
 				if roundIdx < 0 then
 					colorIdx = common.COLOR_TRANSPARENT
 				else
 					colorIdx = common.getColorIndex(roundIdx)
 				end
 			else
-				local index = common.getRowIndex(sprite, y)
+				local index = common.getRowIndex(sprite.height, y)
 				colorIdx = common.getColorIndex(index)
 			end
 
