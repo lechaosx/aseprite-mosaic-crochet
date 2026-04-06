@@ -1,7 +1,6 @@
 local common = require("src.common")
 -- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
 
--- Helper functions moved to common.lua
 local function getLayerByName(sprite, name)
 	for _, l in ipairs(sprite.layers) do
 		if l.name == name then
@@ -11,103 +10,53 @@ local function getLayerByName(sprite, name)
 	return nil
 end
 
-local function getColorDistance(c1, c2)
-    return (c1.red - c2.red)^2 + (c1.green - c2.green)^2 + (c1.blue - c2.blue)^2
-end
-
 local function normalizeImage(sprite, image)
 	local palette = sprite.palettes[1]
 	local colorA = palette:getColor(common.COLOR_A)
 	local colorB = palette:getColor(common.COLOR_B)
-
 	for y = 0, sprite.height - 1 do
 		for x = 0, sprite.width - 1 do
 			local pixelValue = image:getPixel(x, y)
 			if pixelValue ~= common.COLOR_A and pixelValue ~= common.COLOR_B then
-                local color = palette:getColor(pixelValue)
-                local distA = getColorDistance(color, colorA)
-                local distB = getColorDistance(color, colorB)
-				image:drawPixel(x, y, (distA <= distB) and common.COLOR_A or common.COLOR_B)
+				image:drawPixel(x, y, common.nearestColorIndex(palette:getColor(pixelValue), colorA, colorB))
+			end
+		end
+	end
+	if sprite.properties.mosaicMode == common.MODE_ROUND then
+		local vW, vH   = sprite.properties.virtualWidth, sprite.properties.virtualHeight
+		local offX, offY = sprite.properties.virtualOffsetX, sprite.properties.virtualOffsetY
+		local rounds   = sprite.properties.rounds
+		for y = 0, sprite.height - 1 do
+			for x = 0, sprite.width - 1 do
+				if common.getRoundFromEdge(vW, vH, x + offX, y + offY) >= rounds then
+					image:drawPixel(x, y, common.COLOR_TRANSPARENT)
+				end
 			end
 		end
 	end
 end
 
 local function updateRowHighlights(sprite, cel, highlightImage)
-	for y = 0, sprite.height - 1 do
-		local colorIndex = common.getColorIndex(common.getRowIndex(sprite.height, y))
-		for x = 0, sprite.width - 1 do
-			local pixelValue = cel.image:getPixel(x, y)
-			local mainColorMatch = (colorIndex == pixelValue)
-
-			if not mainColorMatch then
-				if y <= 0 or y >= sprite.height - 1 then
-					highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
-				else
-					local innerPixel = cel.image:getPixel(x, y + 1)
-					if colorIndex == innerPixel then
-						highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
-					else
-						highlightImage:drawPixel(x, y - 1, common.HIGHLIGHT_VALID_OVERLAY) -- Valid overlay, highlight row ABOVE
-					end
-				end
-			end
-		end
-	end
+	common.computeRowHighlights(
+		sprite.width, sprite.height,
+		function(x, y) return cel.image:getPixel(x, y) end,
+		function(x, y, c) highlightImage:drawPixel(x, y, c) end
+	)
 end
 
-local function updateCenterHighlights(sprite, cel, highlightImage)
-	local rounds = sprite.properties.rounds
-
-	for y = 0, sprite.height - 1 do
-		for x = 0, sprite.width - 1 do
-			local minDistX = math.min(x, sprite.width - 1 - x)
-			local minDistY = math.min(y, sprite.height - 1 - y)
-			local roundFromEdge = math.min(minDistX, minDistY)
-
-			if roundFromEdge >= rounds then
-				cel.image:drawPixel(x, y, common.COLOR_TRANSPARENT)
-			end
-		end
-	end
-
-	for y = 0, sprite.height - 1 do
-		for x = 0, sprite.width - 1 do
-			local minDistX = math.min(x, sprite.width - 1 - x)
-			local minDistY = math.min(y, sprite.height - 1 - y)
-			local roundFromEdge = math.min(minDistX, minDistY)
-
-			if roundFromEdge < rounds then
-				local roundIndex = rounds - 1 - roundFromEdge
-				local colorIndex = common.getColorIndex(roundIndex)
-
-				if colorIndex ~= cel.image:getPixel(x, y) then
-					if minDistX == minDistY or roundFromEdge == 0 then
-						highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
-					else
-						local stepX, stepY = 0, 0
-						if minDistX < minDistY then
-							stepX = (x * 2 >= sprite.width) and -1 or 1
-						else
-							stepY = (y * 2 >= sprite.height) and -1 or 1
-						end
-
-						local nx, ny = x + stepX, y + stepY
-						local neighborRFE = common.getRoundFromEdge(sprite.width, sprite.height, nx, ny)
-
-						if neighborRFE <= roundFromEdge then
-							-- Step crossed the seam of a zero-dimension inner hole; overlay is always valid
-							highlightImage:drawPixel(x - stepX, y - stepY, common.HIGHLIGHT_VALID_OVERLAY)
-						elseif colorIndex == cel.image:getPixel(nx, ny) then
-							highlightImage:drawPixel(x, y, common.HIGHLIGHT_INVALID_PLACEMENT) -- Invalid
-						else
-							highlightImage:drawPixel(x - stepX, y - stepY, common.HIGHLIGHT_VALID_OVERLAY) -- Valid overlay, highlight round ABOVE
-						end
-					end
-				end
-			end
-		end
-	end
+-- Physical pixel (x, y) maps to virtual pixel (x + virtualOffsetX, y + virtualOffsetY).
+local function updateRoundHighlights(sprite, cel, highlightImage)
+	local W, H = sprite.width, sprite.height
+	common.computeRoundHighlights(
+		W, H,
+		sprite.properties.virtualWidth,
+		sprite.properties.virtualHeight,
+		sprite.properties.virtualOffsetX,
+		sprite.properties.virtualOffsetY,
+		sprite.properties.rounds,
+		function(x, y) return cel.image:getPixel(x, y) end,
+		function(x, y, c) highlightImage:drawPixel(x, y, c) end
+	)
 end
 
 local activeCrochetSprite = nil
@@ -139,8 +88,8 @@ local function updateHighlights(sprite)
 	end
 
 	local highlightImage = Image(sprite.spec)
-	if sprite.properties.mosaicMode == common.MODE_CENTER then
-		updateCenterHighlights(sprite, cel, highlightImage)
+	if sprite.properties.mosaicMode == common.MODE_ROUND then
+		updateRoundHighlights(sprite, cel, highlightImage)
 	else
 		updateRowHighlights(sprite, cel, highlightImage)
 	end
@@ -155,6 +104,67 @@ local function updateHighlights(sprite)
 
 	app.refresh()
 end
+
+-- ============================================================
+-- BACKWARD COMPAT: Delete this entire function before releasing next major version.
+-- v1 -> v2: Upgrades any old round/center sprite to the current format in-place.
+-- Handles: mosaicMode="center", innerRadius, roundSubMode string,
+--          roundVirtualWidth/Height without offsets, roundOffsetX/Y naming.
+local function upgradeSprite(sprite)
+	if sprite.properties.mosaicMode ~= "center" and sprite.properties.mosaicMode ~= common.MODE_ROUND then
+		return
+	end
+
+	if sprite.properties.innerRadius ~= nil and sprite.properties.rounds == nil then
+		sprite.properties.rounds = (sprite.width - 1) / 2 - sprite.properties.innerRadius
+		sprite.properties.innerRadius = nil
+	end
+
+	if sprite.properties.mosaicMode == "center" then
+		sprite.properties.mosaicMode = common.MODE_ROUND
+	end
+
+	if sprite.properties.roundSubMode ~= nil then
+		local sub = sprite.properties.roundSubMode
+		local W, H = sprite.width, sprite.height
+		if sub == "full" then
+			sprite.properties.virtualWidth   = W;     sprite.properties.virtualHeight  = H
+			sprite.properties.virtualOffsetX = 0;     sprite.properties.virtualOffsetY = 0
+		elseif sub == "half" then
+			sprite.properties.virtualWidth   = W;     sprite.properties.virtualHeight  = H * 2
+			sprite.properties.virtualOffsetX = 0;     sprite.properties.virtualOffsetY = H
+		elseif sub == "quarter" then
+			sprite.properties.virtualWidth   = W * 2; sprite.properties.virtualHeight  = H * 2
+			sprite.properties.virtualOffsetX = 0;     sprite.properties.virtualOffsetY = H
+		end
+		sprite.properties.roundSubMode = nil
+	end
+
+	if sprite.properties.roundVirtualWidth ~= nil then
+		sprite.properties.virtualWidth   = sprite.properties.roundVirtualWidth
+		sprite.properties.virtualHeight  = sprite.properties.roundVirtualHeight
+		sprite.properties.virtualOffsetX = 0
+		sprite.properties.virtualOffsetY = sprite.properties.roundVirtualHeight - sprite.height
+		sprite.properties.roundVirtualWidth  = nil
+		sprite.properties.roundVirtualHeight = nil
+	end
+
+	if sprite.properties.roundOffsetX ~= nil then
+		sprite.properties.virtualOffsetX = sprite.properties.roundOffsetX
+		sprite.properties.virtualOffsetY = sprite.properties.roundOffsetY
+		sprite.properties.roundOffsetX   = nil
+		sprite.properties.roundOffsetY   = nil
+	end
+
+	if sprite.properties.virtualWidth == nil then
+		sprite.properties.virtualWidth   = sprite.width
+		sprite.properties.virtualHeight  = sprite.height
+		sprite.properties.virtualOffsetX = 0
+		sprite.properties.virtualOffsetY = 0
+	end
+end
+-- END BACKWARD COMPAT
+-- ============================================================
 
 -- Reattaches the crochet pattern's change callback to the current active sprite.
 -- If app.sprite is nil or not a mosaic crochet pattern, it just detaches current listener.
@@ -180,16 +190,7 @@ local function reattachCrochetCallbacks()
 		return
 	end
 
-	-- BACKWARD COMPAT (v1 -> v2): old sprites stored innerRadius but not rounds.
-	-- Derive rounds from image size: old formula was size = (innerRadius + rounds) * 2 + 1.
-	-- Delete this block in v2.
-	if sprite.properties.mosaicMode == common.MODE_CENTER
-		and sprite.properties.innerRadius ~= nil
-		and sprite.properties.rounds == nil then
-		local innerRadius = sprite.properties.innerRadius
-		sprite.properties.rounds = (sprite.width - 1) / 2 - innerRadius
-		sprite.properties.innerRadius = nil
-	end
+	upgradeSprite(sprite)
 
 	-- Store the callback function reference for future detachment.
 	crochetChangeCallback = function(ev)
@@ -205,19 +206,31 @@ local function reattachCrochetCallbacks()
 end
 
 local function createMosaicSprite()
+	-- Sub-mode options for the "New Mosaic Pattern" dialog.
+	-- GUI helpers only; the file stores virtualWidth/virtualHeight/virtualOffsetX/Y.
+	--   FULL:    origin at center; all four quadrants. Physical: (innerW+rounds*2)×(innerH+rounds*2)
+	--   HALF:    origin at top edge center; bottom half only. Physical: (innerW+rounds*2)×(ceil(innerH/2)+rounds)
+	--   QUARTER: origin at top-right corner; bottom-left quarter only. Physical: (ceil(innerW/2)+rounds)×(ceil(innerH/2)+rounds)
+	local ROUND_SUBMODE_FULL    = "full"
+	local ROUND_SUBMODE_HALF    = "half"
+	local ROUND_SUBMODE_QUARTER = "quarter"
+
 	local dlg = Dialog("New Mosaic Pattern")
-	dlg:combobox{ id="mode", label="Mode:", options={ common.MODE_ROW, common.MODE_CENTER }, selected=common.MODE_ROW, onchange=function()
-		dlg:modify{ id="width", visible = dlg.data.mode == common.MODE_ROW }
-		dlg:modify{ id="height", visible = dlg.data.mode == common.MODE_ROW }
-		dlg:modify{ id="innerWidth", visible = dlg.data.mode == common.MODE_CENTER }
-		dlg:modify{ id="innerHeight", visible = dlg.data.mode == common.MODE_CENTER }
-		dlg:modify{ id="rounds", visible = dlg.data.mode == common.MODE_CENTER }
+	dlg:combobox{ id="mode", label="Mode:", options={ common.MODE_ROW, common.MODE_ROUND }, selected=common.MODE_ROW, onchange=function()
+		local isRound = dlg.data.mode == common.MODE_ROUND
+		dlg:modify{ id="width",        visible = not isRound }
+		dlg:modify{ id="height",       visible = not isRound }
+		dlg:modify{ id="roundSubMode", visible = isRound }
+		dlg:modify{ id="innerWidth",   visible = isRound }
+		dlg:modify{ id="innerHeight",  visible = isRound }
+		dlg:modify{ id="rounds",       visible = isRound }
 	end }
-	   :number{ id="width", label="Width:", decimals=0, text="32", visible=true }
-	   :number{ id="height", label="Height:", decimals=0, text="32", visible=true }
-	   :number{ id="innerWidth", label="Inner Width:", decimals=0, text="3", visible=false }
-	   :number{ id="innerHeight", label="Inner Height:", decimals=0, text="3", visible=false }
-	   :number{ id="rounds", label="Rounds:", decimals=0, text="5", visible=false }
+	   :number{   id="width",        label="Width:",       decimals=0, text="32", visible=true }
+	   :number{   id="height",       label="Height:",      decimals=0, text="32", visible=true }
+	   :combobox{ id="roundSubMode", label="Sub-mode:",    options={ ROUND_SUBMODE_FULL, ROUND_SUBMODE_HALF, ROUND_SUBMODE_QUARTER }, selected=ROUND_SUBMODE_FULL, visible=false }
+	   :number{   id="innerWidth",   label="Inner Width:", decimals=0, text="3",  visible=false }
+	   :number{   id="innerHeight",  label="Inner Height:",decimals=0, text="3",  visible=false }
+	   :number{   id="rounds",       label="Rounds:",      decimals=0, text="5",  visible=false }
 	   :button{ id="ok", text="OK" }
 	   :button{ id="cancel", text="Cancel" }
 
@@ -226,12 +239,25 @@ local function createMosaicSprite()
 	local data = dlg.data
 	if not data.ok then return end
 
-	local width, height
-	if data.mode == common.MODE_CENTER then
-		width = data.innerWidth + data.rounds * 2
-		height = data.innerHeight + data.rounds * 2
+	local width, height, virtualWidth, virtualHeight, offsetX, offsetY
+	if data.mode == common.MODE_ROUND then
+		virtualWidth  = data.innerWidth  + data.rounds * 2
+		virtualHeight = data.innerHeight + data.rounds * 2
+		local sub = data.roundSubMode
+		if sub == ROUND_SUBMODE_FULL then
+			width  = virtualWidth;                   height  = virtualHeight
+			offsetX = 0;                             offsetY = 0
+		elseif sub == ROUND_SUBMODE_HALF then
+			width   = virtualWidth
+			offsetX = 0;  offsetY = math.floor(virtualHeight / 2)
+			height  = virtualHeight - offsetY
+		elseif sub == ROUND_SUBMODE_QUARTER then
+			width   = math.ceil(virtualWidth / 2)
+			offsetX = 0;  offsetY = math.floor(virtualHeight / 2)
+			height  = virtualHeight - offsetY
+		end
 	else
-		width = data.width
+		width  = data.width
 		height = data.height
 	end
 
@@ -244,8 +270,12 @@ local function createMosaicSprite()
 
 	local sprite = Sprite(spec)
 	sprite.properties.mosaicMode = data.mode
-	if data.mode == common.MODE_CENTER then
-		sprite.properties.rounds = data.rounds
+	if data.mode == common.MODE_ROUND then
+		sprite.properties.rounds          = data.rounds
+		sprite.properties.virtualWidth    = virtualWidth
+		sprite.properties.virtualHeight   = virtualHeight
+		sprite.properties.virtualOffsetX  = offsetX
+		sprite.properties.virtualOffsetY  = offsetY
 	end
 
 	sprite.layers[1].name = common.LAYER_PATTERN
@@ -264,16 +294,12 @@ local function createMosaicSprite()
 		for x = 0, sprite.width - 1 do
 			local colorIdx
 
-			if sprite.properties.mosaicMode == common.MODE_CENTER then
-				local roundIdx = common.getRoundIndex(sprite.width, sprite.height, sprite.properties.rounds, x, y)
-				if roundIdx < 0 then
-					colorIdx = common.COLOR_TRANSPARENT
-				else
-					colorIdx = common.getColorIndex(roundIdx)
-				end
+			if sprite.properties.mosaicMode == common.MODE_ROUND then
+				local roundIndex = sprite.properties.rounds - 1
+					- common.getRoundFromEdge(virtualWidth, virtualHeight, x + offsetX, y + offsetY)
+				colorIdx = (roundIndex < 0) and common.COLOR_TRANSPARENT or common.getColorIndex(roundIndex)
 			else
-				local index = common.getRowIndex(sprite.height, y)
-				colorIdx = common.getColorIndex(index)
+				colorIdx = common.getColorIndex(common.getRowIndex(sprite.height, y))
 			end
 
 			cel.image:putPixel(x, y, colorIdx)

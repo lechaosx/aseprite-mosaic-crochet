@@ -13,7 +13,43 @@ M.LAYER_HIGHLIGHTS = "Mosaic Highlights"
 
 -- Mosaic modes
 M.MODE_ROW = "row"
-M.MODE_CENTER = "center"
+M.MODE_ROUND = "round"
+
+-- Squared Euclidean distance in RGB space (alpha ignored).
+function M.getColorDistance(c1, c2)
+	return (c1.red - c2.red)^2 + (c1.green - c2.green)^2 + (c1.blue - c2.blue)^2
+end
+
+-- Returns COLOR_A or COLOR_B, whichever is closer to `color` in RGB space.
+-- Ties resolve to COLOR_A.
+function M.nearestColorIndex(color, colorA, colorB)
+	return M.getColorDistance(color, colorA) <= M.getColorDistance(color, colorB)
+		and M.COLOR_A or M.COLOR_B
+end
+
+-- Pure row-highlight computation. No Aseprite API dependencies.
+-- W, H           = image dimensions
+-- getPixel(x, y) → current color index
+-- setHighlight(x, y, c) → called to write a highlight color
+function M.computeRowHighlights(W, H, getPixel, setHighlight)
+	for y = 0, H - 1 do
+		local colorIndex = M.getColorIndex(M.getRowIndex(H, y))
+		for x = 0, W - 1 do
+			if colorIndex ~= getPixel(x, y) then
+				if y <= 0 or y >= H - 1 then
+					setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+				else
+					local innerPixel = getPixel(x, y + 1)
+					if colorIndex == innerPixel then
+						setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+					else
+						setHighlight(x, y - 1, M.HIGHLIGHT_VALID_OVERLAY)
+					end
+				end
+			end
+		end
+	end
+end
 
 function M.getColorIndex(index)
 	return index % 2 == 0 and M.COLOR_A or M.COLOR_B
@@ -32,6 +68,61 @@ end
 function M.getRoundIndex(width, height, rounds, x, y)
 	local roundFromEdge = M.getRoundFromEdge(width, height, x, y)
 	return rounds - 1 - roundFromEdge
+end
+
+-- Pure highlight computation for round mode. No Aseprite API dependencies.
+-- Assumes inner-hole pixels have already been cleared (see clearRoundInnerHole).
+-- W, H        = physical image dimensions
+-- vW, vH      = virtual image dimensions
+-- offX, offY  = virtual offset (vx = x + offX, vy = y + offY)
+-- rounds      = number of rounds
+-- getPixel(x, y)        → current color index at physical pixel
+-- setHighlight(x, y, c) → called to write a highlight color
+function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, setHighlight)
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			local vx = x + offX
+			local vy = y + offY
+			local minDistX = math.min(vx, vW - 1 - vx)
+			local minDistY = math.min(vy, vH - 1 - vy)
+			local roundFromEdge = math.min(minDistX, minDistY)
+
+			if roundFromEdge < rounds then
+				local colorIndex = M.getColorIndex(rounds - 1 - roundFromEdge)
+
+				if colorIndex ~= getPixel(x, y) then
+					if minDistX == minDistY or roundFromEdge == 0 then
+						setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+					else
+						local stepX, stepY = 0, 0
+						if minDistX < minDistY then
+							stepX = (vx * 2 >= vW) and -1 or 1
+						else
+							stepY = (vy * 2 >= vH) and -1 or 1
+						end
+
+						local nx, ny = x + stepX, y + stepY
+
+						local isSeam
+						if nx < 0 or nx >= W or ny < 0 or ny >= H then
+							isSeam = true
+						else
+							local neighborRFE = M.getRoundFromEdge(vW, vH, nx + offX, ny + offY)
+							isSeam = neighborRFE <= roundFromEdge
+						end
+
+						if isSeam then
+							setHighlight(x - stepX, y - stepY, M.HIGHLIGHT_VALID_OVERLAY)
+						elseif colorIndex == getPixel(nx, ny) then
+							setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+						else
+							setHighlight(x - stepX, y - stepY, M.HIGHLIGHT_VALID_OVERLAY)
+						end
+					end
+				end
+			end
+		end
+	end
 end
 
 return M
