@@ -37,15 +37,8 @@ function M.compress(flat)
 	local function solve(i, j)
 		if memo[i] and memo[i][j] then return memo[i][j] end
 
-		if i == j then
-			local res = { repr = { flat[i] }, cost = 1 }
-			if not memo[i] then memo[i] = {} end
-			memo[i][j] = res
-			return res
-		end
-
-		local best_repr, best_cost = nil, math.huge
-
+		local result = { seq = {}, cost = j - i + 1 }
+		for k = i, j do result.seq[#result.seq + 1] = flat[k] end
 		local len = j - i + 1
 
 		-- Try all splits.
@@ -53,11 +46,11 @@ function M.compress(flat)
 			local L = solve(i, k)
 			local R = solve(k + 1, j)
 			local c = L.cost + R.cost
-			if c < best_cost then
-				best_cost = c
-				best_repr = {}
-				for _, v in ipairs(L.repr) do best_repr[#best_repr + 1] = v end
-				for _, v in ipairs(R.repr) do best_repr[#best_repr + 1] = v end
+			if c < result.cost then
+				result.cost = c
+				result.seq = {}
+				for _, v in ipairs(L.seq) do result.seq[#result.seq + 1] = v end
+				for _, v in ipairs(R.seq) do result.seq[#result.seq + 1] = v end
 			end
 		end
 
@@ -65,24 +58,20 @@ function M.compress(flat)
 		-- Cost = inner leaf count only; repeat group wrappers are free.
 		for period = 1, math.floor(len / 2) do
 			if len % period == 0 then
-				local count = len / period
-				if isRepeat(flat, i, period, count) then
-					local inner = solve(i, i + period - 1)
-					if inner.cost < best_cost then
-						best_cost = inner.cost
-						best_repr = { { inner.repr, count } }
-					end
+				local inner = solve(i, i + period - 1)
+				if isRepeat(flat, i, period, len / period) and inner.cost < result.cost then
+					result.cost = inner.cost
+					result.seq = { { inner.seq, len / period } }
 				end
 			end
 		end
 
-		local res = { repr = best_repr, cost = best_cost }
 		if not memo[i] then memo[i] = {} end
-		memo[i][j] = res
-		return res
+		memo[i][j] = result
+		return result
 	end
 
-	return solve(1, n).repr
+	return solve(1, n).seq
 end
 
 -- Human-readable serialization for debugging / export preview.
