@@ -330,15 +330,18 @@ local function exportPattern()
 
 	local defaultPath = sprite.filename:gsub("%.[^%.]+$", "_pattern.txt")
 	local optionsDialog = Dialog("Export Crochet Pattern")
-	optionsDialog:file{   id="path",      label="Save to:",           save=true, filename=defaultPath, filetypes={"txt"} }
-	             :check{  id="alternate", label="Alternate direction:", selected=false }
-	             :button{ id="ok",        text="Export" }
-	             :button{ id="cancel",    text="Cancel" }
+	local isRound = sprite.properties.mosaicMode == common.MODE_ROUND
+	optionsDialog:file{   id="path",            label="Save to:",           save=true, filename=defaultPath, filetypes={"txt"} }
+	             :check{  id="alternate",        label="Alternate direction:", selected=false }
+	             :check{  id="startWithCorner",  label="Start with corner:",  selected=true, visible=isRound }
+	             :button{ id="ok",              text="Export" }
+	             :button{ id="cancel",          text="Cancel" }
 	optionsDialog:show()
 	if not optionsDialog.data.ok then return end
 
-	local alternate  = optionsDialog.data.alternate
-	local outputPath = optionsDialog.data.path
+	local alternate       = optionsDialog.data.alternate
+	local startWithCorner = optionsDialog.data.startWithCorner
+	local outputPath      = optionsDialog.data.path
 
 	local function stitchAt(x, y)
 		return highlightCel.image:getPixel(x, y) == common.HIGHLIGHT_VALID_OVERLAY and "oc" or "sc"
@@ -388,6 +391,10 @@ local function exportPattern()
 		rowIndex = rowIndex + 1
 		local flat = {}
 		for instruction in instructionIter do flat[#flat + 1] = instruction end
+		-- HACK: generator always ends with a corner; rotate it to the front to start with one instead
+		if startWithCorner and label == "Round " then
+			table.insert(flat, 1, table.remove(flat))
+		end
 		if alternate and rowIndex % 2 == 0 then
 			local reversed = {}
 			for i = #flat, 1, -1 do reversed[#reversed + 1] = flat[i] end
