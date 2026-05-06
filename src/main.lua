@@ -351,38 +351,34 @@ local function exportPattern()
 	local allRows, label
 
 	if sprite.properties.mosaicMode == common.MODE_ROW then
-		local rowIter = walk.rowWalk(width, height)
 		label   = "Row "
-		allRows = function()
-			local coordIter = rowIter()
-			if coordIter then
-				return function()
-					local coord = coordIter()
-					if coord then return stitchAt(coord[1], coord[2]) end
-				end
+		allRows = coroutine.wrap(function()
+			for coordIter in walk.rowWalk(width, height) do
+				coroutine.yield(coroutine.wrap(function()
+					for coord in coordIter do
+						coroutine.yield(stitchAt(coord[1], coord[2]))
+					end
+				end))
 			end
-		end
+		end)
 	else
 		local virtualWidth  = sprite.properties.virtualWidth
 		local virtualHeight = sprite.properties.virtualHeight
 		local offsetX       = sprite.properties.virtualOffsetX
 		local offsetY       = sprite.properties.virtualOffsetY
-		local roundIter     = walk.roundWalk(width, height, virtualWidth, virtualHeight, offsetX, offsetY, sprite.properties.rounds)
 		label   = "Round "
-		allRows = function()
-			local segmentIter = roundIter()
-			if segmentIter then
-				local currentSegment = segmentIter()
-				return function()
-					while currentSegment do
-						local coord = currentSegment()
-						if coord then return stitchAt(coord[1], coord[2]) end
-						currentSegment = segmentIter()
-						return "(sc, ch, sc)"
+		allRows = coroutine.wrap(function()
+			for segIter in walk.roundWalk(width, height, virtualWidth, virtualHeight, offsetX, offsetY, sprite.properties.rounds) do
+				coroutine.yield(coroutine.wrap(function()
+					for coordIter in segIter do
+						for coord in coordIter do
+							coroutine.yield(stitchAt(coord[1], coord[2]))
+						end
+						coroutine.yield("(sc, ch, sc)")
 					end
-				end
+				end))
 			end
-		end
+		end)
 	end
 
 	local lines = {}
