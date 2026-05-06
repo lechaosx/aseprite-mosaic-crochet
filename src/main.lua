@@ -1,4 +1,6 @@
-local common = require("src.common")
+local common  = require("src.common")
+local pattern = require("src.pattern")
+local walk    = require("src.walk")
 -- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
 
 local function getLayerByName(sprite, name)
@@ -312,6 +314,98 @@ local function createMosaicSprite()
 	reattachCrochetCallbacks()
 end
 
+local function exportPattern()
+	local sprite = app.sprite
+	if not sprite or not sprite.properties.mosaicMode then
+		app.alert("No active mosaic crochet sprite.")
+		return
+	end
+
+	local highlightLayer = getLayerByName(sprite, common.LAYER_HIGHLIGHTS)
+	local highlightCel   = highlightLayer and highlightLayer:cel(app.activeFrame)
+	if not highlightCel then
+		app.alert("No highlight layer found. Open the sprite and let highlights update first.")
+		return
+	end
+
+	local defaultPath = sprite.filename:gsub("%.[^%.]+$", "_pattern.txt")
+	local optionsDialog = Dialog("Export Crochet Pattern")
+	optionsDialog:file{   id="path",      label="Save to:",           save=true, filename=defaultPath, filetypes={"txt"} }
+	             :check{  id="alternate", label="Alternate direction:", selected=false }
+	             :button{ id="ok",        text="Export" }
+	             :button{ id="cancel",    text="Cancel" }
+	optionsDialog:show()
+	if not optionsDialog.data.ok then return end
+
+	local alternate  = optionsDialog.data.alternate
+	local outputPath = optionsDialog.data.path
+
+	local function stitchAt(x, y)
+		return highlightCel.image:getPixel(x, y) == common.HIGHLIGHT_VALID_OVERLAY and "oc" or "sc"
+	end
+
+	local width, height = sprite.width, sprite.height
+	local allRows, label
+
+	if sprite.properties.mosaicMode == common.MODE_ROW then
+		local rowIter = walk.rowWalk(width, height)
+		label   = "Row "
+		allRows = function()
+			local coordIter = rowIter()
+			if coordIter then
+				return function()
+					local coord = coordIter()
+					if coord then return stitchAt(coord[1], coord[2]) end
+				end
+			end
+		end
+	else
+		local virtualWidth  = sprite.properties.virtualWidth
+		local virtualHeight = sprite.properties.virtualHeight
+		local offsetX       = sprite.properties.virtualOffsetX
+		local offsetY       = sprite.properties.virtualOffsetY
+		local roundIter     = walk.roundWalk(width, height, virtualWidth, virtualHeight, offsetX, offsetY, sprite.properties.rounds)
+		label   = "Round "
+		allRows = function()
+			local segmentIter = roundIter()
+			if segmentIter then
+				local currentSegment = segmentIter()
+				return function()
+					while currentSegment do
+						local coord = currentSegment()
+						if coord then return stitchAt(coord[1], coord[2]) end
+						currentSegment = segmentIter()
+						return "(sc, ch, sc)"
+					end
+				end
+			end
+		end
+	end
+
+	local lines = {}
+	local rowIndex = 0
+	for instructionIter in allRows do
+		rowIndex = rowIndex + 1
+		local flat = {}
+		for instruction in instructionIter do flat[#flat + 1] = instruction end
+		if alternate and rowIndex % 2 == 0 then
+			local reversed = {}
+			for i = #flat, 1, -1 do reversed[#reversed + 1] = flat[i] end
+			flat = reversed
+		end
+		lines[#lines + 1] = label .. rowIndex .. ": " .. pattern.toString(pattern.compress(flat))
+	end
+
+	local file = io.open(outputPath, "w")
+	if file then
+		file:write(table.concat(lines, "\n"))
+		file:close()
+		app.alert("Pattern saved to:\n" .. outputPath)
+	else
+		app.alert("Failed to write file:\n" .. outputPath)
+	end
+end
+
 function init(plugin)
 	-- Register the command to create a new mosaic crochet sprite.
 	plugin:newCommand{
@@ -319,6 +413,32 @@ function init(plugin)
 		title="New Mosaic Crochet Sprite",
 		group="file_new",
 		onclick=createMosaicSprite
+	}
+
+	plugin:newCommand{
+		id="export_crochet_pattern",
+		title="Export Crochet Pattern",
+		group="file_export",
+		onclick=exportPattern,
+		onenabled=function()
+			local sprite = app.sprite
+			if not sprite
+			or not sprite.properties.mosaicMode
+			or sprite.colorMode ~= ColorMode.INDEXED then
+				return false
+			end
+			local highlightLayer = getLayerByName(sprite, common.LAYER_HIGHLIGHTS)
+			local highlightCel   = highlightLayer and highlightLayer:cel(app.activeFrame)
+			if not highlightCel then return false end
+			for y = 0, sprite.height - 1 do
+				for x = 0, sprite.width - 1 do
+					if highlightCel.image:getPixel(x, y) == common.HIGHLIGHT_INVALID_PLACEMENT then
+						return false
+					end
+				end
+			end
+			return true
+		end
 	}
 
 	-- Listen for site changes (switching between sprites or closing files).

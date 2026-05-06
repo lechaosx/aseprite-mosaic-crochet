@@ -59,9 +59,9 @@ function M.compress(flat)
 		for period = 1, math.floor(len / 2) do
 			if len % period == 0 then
 				local inner = solve(i, i + period - 1)
-				if isRepeat(flat, i, period, len / period) and inner.cost < result.cost then
+				if isRepeat(flat, i, period, math.floor(len / period)) and inner.cost < result.cost then
 					result.cost = inner.cost
-					result.seq = { { inner.seq, len / period } }
+					result.seq = { { inner.seq, math.floor(len / period) } }
 				end
 			end
 		end
@@ -86,9 +86,9 @@ function M.toString(seq)
 		else
 			local items, count = item[1], item[2]
 			if #items == 1 and type(items[1]) == "string" then
-				parts[#parts + 1] = count .. items[1]
+				parts[#parts + 1] = count .. " " .. items[1]
 			else
-				parts[#parts + 1] = "[" .. M.toString(items) .. "]×" .. count
+				parts[#parts + 1] = "[" .. M.toString(items) .. "] × " .. count
 			end
 		end
 	end

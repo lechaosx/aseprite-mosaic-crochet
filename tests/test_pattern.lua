@@ -63,24 +63,24 @@ end)
 -- the "sc" at the start of the next, hiding the repeating structure.
 -- Character-level period detection finds it correctly.
 
-test("compress: [sc,dc,sc]×3 detected across merged RLE boundary", function()
-	-- "sc,dc,sc, sc,dc,sc, sc,dc,sc" – the trailing sc and leading sc of adjacent
-	-- periods merge in RLE into {sc,2}, but at character level period=3 is visible.
+test("compress: [sc, dc, sc] × 3 detected across merged RLE boundary", function()
+	-- "sc, dc, sc, sc, dc, sc, sc, dc, sc" – the trailing sc and leading sc of adjacent
+	-- periods merge in RLE into {sc, 2}, but at character level period=3 is visible.
 	assertEqual(
 		P.compress({ "sc", "dc", "sc", "sc", "dc", "sc", "sc", "dc", "sc" }),
 		{ { { "sc", "dc", "sc" }, 3 } }
 	)
 end)
 
-test("compress: [dc,sc,dc]×3 detected across merged RLE boundary", function()
+test("compress: [dc, sc, dc] × 3 detected across merged RLE boundary", function()
 	assertEqual(
 		P.compress({ "dc", "sc", "dc", "dc", "sc", "dc", "dc", "sc", "dc" }),
 		{ { { "dc", "sc", "dc" }, 3 } }
 	)
 end)
 
-test("compress: [sc,dc,sc,dc]×2 detected across merged boundary", function()
-	-- Period [sc,dc,sc,dc] ends sc, starts sc → merge at boundary.
+test("compress: [sc, dc, sc, dc] × 2 detected across merged boundary", function()
+	-- Period [sc, dc, sc, dc] ends sc, starts sc → merge at boundary.
 	-- period=2 is cheaper than period=4 with count=2.
 	assertEqual(
 		P.compress({ "sc", "dc", "sc", "dc", "sc", "dc", "sc", "dc" }),
@@ -90,25 +90,25 @@ end)
 
 -- ─── compress: clean periods (no boundary merge) ───────────────────────────
 
-test("compress: alternating [sc,dc]×12", function()
+test("compress: alternating [sc, dc] × 12", function()
 	assertEqual(P.compress(flatten({ { { "sc", "dc" }, 12 } })), { { { "sc", "dc" }, 12 } })
 end)
 
-test("compress: checker [2sc,2dc]×4", function()
+test("compress: checker [2sc, 2dc] × 4", function()
 	assertEqual(
 		P.compress(flatten({ { { "sc", "sc", "dc", "dc" }, 4 } })),
 		{ { { { { "sc" }, 2 }, { { "dc" }, 2 } }, 4 } }
 	)
 end)
 
-test("compress: [3sc,dc]×3", function()
+test("compress: [3sc, dc] × 3", function()
 	assertEqual(
 		P.compress(flatten({ { { "sc", "sc", "sc", "dc" }, 3 } })),
 		{ { { { { "sc" }, 3 }, "dc" }, 3 } }
 	)
 end)
 
-test("compress: long period [sc,dc,2sc,2dc,sc,dc]×3", function()
+test("compress: long period [sc, dc, 2sc, 2dc, sc, dc] × 3", function()
 	-- Period ends dc, starts sc → no boundary merge.
 	assertEqual(
 		P.compress(flatten({ { { "sc", "dc", "sc", "sc", "dc", "dc", "sc", "dc" }, 3 } })),
@@ -149,15 +149,15 @@ end)
 
 -- ─── compress: nested repeats ──────────────────────────────────────────────
 
-test("compress: nested [[sc,dc]×3, dc]×3", function()
-	-- Period = sc,dc,sc,dc,sc,dc,dc  (7 chars, ends dc starts sc → no boundary merge).
+test("compress: nested [[sc, dc] × 3, dc] × 3", function()
+	-- Period = sc, dc, sc, dc, sc, dc, dc  (7 chars, ends dc starts sc → no boundary merge).
 	assertEqual(
 		P.compress(flatten({ { { "sc", "dc", "sc", "dc", "sc", "dc", "dc" }, 3 } })),
 		{ { { { { "sc", "dc" }, 3 }, "dc" }, 3 } }
 	)
 end)
 
-test("compress: nested [[sc,dc]×4, dc]×2", function()
+test("compress: nested [[sc, dc] × 4, dc] × 2", function()
 	assertEqual(
 		P.compress(flatten({ { { "sc", "dc", "sc", "dc", "sc", "dc", "sc", "dc", "dc" }, 2 } })),
 		{ { { { { "sc", "dc" }, 4 }, "dc" }, 2 } }
@@ -166,9 +166,9 @@ end)
 
 -- ─── compress: non-divisible length ────────────────────────────────────────
 
-test("compress: 7 chars [sc,dc,sc,dc,sc,dc,sc] – split at leftmost improvement", function()
-	-- No period divides 7. Split k=1 is found first: sc + [dc,sc]×3.
-	-- Split k=6 also gives same cost ([sc,dc]×3 + sc) but is found second → no update.
+test("compress: 7 chars [sc, dc, sc, dc, sc, dc, sc] – split at leftmost improvement", function()
+	-- No period divides 7. Split k=1 is found first: sc + [dc, sc] × 3.
+	-- Split k=6 also gives same cost ([sc, dc] × 3 + sc) but is found second → no update.
 	assertEqual(
 		P.compress({ "sc", "dc", "sc", "dc", "sc", "dc", "sc" }),
 		{ "sc", { { "dc", "sc" }, 3 } }
@@ -186,7 +186,7 @@ end)
 -- ─── compress: edge cases ──────────────────────────────────────────────────
 
 test("compress: all sc – single stitch, no grouping cheaper", function()
-	-- [sc]×N and a plain stitch run both cost 1 leaf – tie, period wins.
+	-- [sc] × N and a plain stitch run both cost 1 leaf – tie, period wins.
 	assertEqual(
 		P.compress({ "sc", "sc", "sc", "sc", "sc", "sc", "sc", "sc", "sc", "sc" }),
 		{ { { "sc" }, 10 } }
@@ -197,10 +197,16 @@ test("compress: count-10 repeat", function()
 	assertEqual(P.compress(flatten({ { { "sc", "dc" }, 10 } })), { { { "sc", "dc" }, 10 } })
 end)
 
+test("compress: repeat count is integer not float", function()
+	-- len/period uses division which gives floats in Lua 5.3+; must be floored
+	local result = P.compress({ "sc", "dc", "sc", "dc", "sc", "dc" })
+	assert(not P.toString(result):find("%."), "count must not contain a decimal point")
+end)
+
 test("compress: leaves cost prefers nested inner over flat inner", function()
-	-- Period 5, count 2: inner = sc,dc,sc,dc,dc.
-	-- +1-per-group cost: inner [sc,dc,sc,2dc] costs 4, outer group costs 5.
-	-- Leaves-only cost:  inner [[sc,dc]×2,dc] costs 3, outer group costs 3.
+	-- Period 5, count 2: inner = sc, dc, sc, dc, dc.
+	-- +1-per-group cost: inner [sc, dc, sc, 2dc] costs 4, outer group costs 5.
+	-- Leaves-only cost:  inner [[sc, dc] × 2, dc] costs 3, outer group costs 3.
 	assertEqual(
 		P.compress(flatten({ { { "sc", "dc", "sc", "dc", "dc" }, 2 } })),
 		{ { { { { "sc", "dc" }, 2 }, "dc" }, 2 } }
@@ -209,7 +215,7 @@ end)
 
 -- ─── roundtrip: no information lost ────────────────────────────────────────
 
-test("roundtrip: boundary-merge case [sc,dc,sc]×3", function()
+test("roundtrip: boundary-merge case [sc, dc, sc] × 3", function()
 	local flat = { "sc", "dc", "sc", "sc", "dc", "sc", "sc", "dc", "sc" }
 	assertEqual(flatten(P.compress(flat)), flat)
 end)
@@ -252,22 +258,22 @@ test("toString: flat sequence", function()
 	assert(P.toString({ "sc", "dc", "sc" }) == "sc, dc, sc")
 end)
 
-test("toString: single-stitch repeat uses Nsc notation", function()
-	assert(P.toString({ { { "sc" }, 3 } }) == "3sc")
-	assert(P.toString({ { { "dc" }, 10 } }) == "10dc")
+test("toString: single-stitch repeat uses count-space-type notation", function()
+	assert(P.toString({ { { "sc" }, 3 } }) == "3 sc")
+	assert(P.toString({ { { "dc" }, 10 } }) == "10 dc")
 end)
 
 test("toString: shallow repeat group", function()
-	assert(P.toString({ { { "sc", "dc" }, 4 } }) == "[sc, dc]×4")
+	assert(P.toString({ { { "sc", "dc" }, 4 } }) == "[sc, dc] × 4")
 end)
 
 test("toString: nested repeat group", function()
 	local inner = { { "sc", "dc" }, 2 }
 	local outer = { { inner, "sc" }, 3 }
-	assert(P.toString({ outer }) == "[[sc, dc]×2, sc]×3")
+	assert(P.toString({ outer }) == "[[sc, dc] × 2, sc] × 3")
 end)
 
 test("toString: mixed flat and grouped", function()
 	assert(P.toString({ "sc", { { "dc", { { "sc" }, 2 } }, 3 }, "dc" })
-		== "sc, [dc, 2sc]×3, dc")
+		== "sc, [dc, 2 sc] × 3, dc")
 end)
