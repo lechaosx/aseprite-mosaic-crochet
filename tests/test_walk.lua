@@ -17,14 +17,12 @@ local function collectAll(outerIter)
 	return t
 end
 
-local function collectSegs(roundIter)
-	local rounds = {}
-	for segIter in roundIter do
-		local segs = {}
-		for seg in segIter do segs[#segs + 1] = collect(seg) end
-		rounds[#rounds + 1] = segs
+local function countCorners(coords, offX, offY, vW, vH)
+	local n = 0
+	for _, c in ipairs(coords) do
+		if walk.isCornerCoord(c[1], c[2], offX, offY, vW, vH) then n = n + 1 end
 	end
-	return rounds
+	return n
 end
 
 -- ─── rowWalk ───────────────────────────────────────────────────────────────
@@ -55,104 +53,138 @@ test("rowWalk: y decreases across rows", function()
 	assert(rows[3][1][2] == 0)
 end)
 
--- ─── roundWalk: round count ────────────────────────────────────────────────
+-- ─── roundWalk ─────────────────────────────────────────────────────────────
 
 test("roundWalk: yields exactly `rounds` rounds", function()
-	-- vW=5=1+2*2, rounds=2 (innerWidth=1)
-	assert(#collectSegs(walk.roundWalk(5, 5, 5, 5, 0, 0, 2)) == 2)
-	-- vW=7=1+2*3, rounds=3 (innerWidth=1)
-	assert(#collectSegs(walk.roundWalk(7, 7, 7, 7, 0, 0, 3)) == 3)
+	assert(#collectAll(walk.roundWalk(5, 5, 2)) == 2)
+	assert(#collectAll(walk.roundWalk(7, 7, 3)) == 3)
 end)
 
--- ─── roundWalk: segment count ──────────────────────────────────────────────
-
-test("roundWalk full: 4 segments per round (W==vW, H==vH)", function()
-	for segIter in walk.roundWalk(5, 5, 5, 5, 0, 0, 2) do
-		local t = {}
-		for seg in segIter do t[#t + 1] = seg end
-		assert(#t == 4)
+test("roundWalk: each full round has 4 corners", function()
+	-- no clipping: all 4 corners are always present
+	for round in walk.roundWalk(5, 5, 2) do
+		assert(countCorners(collect(round), 0, 0, 5, 5) == 4)
 	end
 end)
 
-test("roundWalk half: 2 segments per round (W==vW, H<vH)", function()
-	for segIter in walk.roundWalk(5, 5, 5, 10, 0, 5, 1) do
-		local t = {}
-		for seg in segIter do t[#t + 1] = seg end
-		assert(#t == 2)
+test("roundWalk: total coords = 2*(LR+TB) + 4 corners (innerWidth=1)", function()
+	-- vW=vH=2*rounds+1; total per round r = 4*(2r-1)+4 = 8r
+	local rounds = collectAll(walk.roundWalk(7, 7, 3))
+	assert(#rounds[1] == 8,  "r=1: 8")
+	assert(#rounds[2] == 16, "r=2: 16")
+	assert(#rounds[3] == 24, "r=3: 24")
+end)
+
+test("roundWalk: total coords correct with innerWidth=3", function()
+	-- vW=vH=7, rounds=2: r=1: LR=TB=3 → 16; r=2: LR=TB=5 → 24
+	local rounds = collectAll(walk.roundWalk(7, 7, 2))
+	assert(#rounds[1] == 16, "r=1: 16")
+	assert(#rounds[2] == 24, "r=2: 24")
+end)
+
+test("roundWalk: flat coord order starts at TL corner, anti-clockwise", function()
+	-- vW=vH=5, rounds=2, innerWidth=1. r=1: LR=TB=1
+	-- TL:(1,1), side1(left↓):(1,2), BL:(1,3), side2(bot→):(2,3),
+	-- BR:(3,3), side3(right↑):(3,2), TR:(3,1), side4(top←):(2,1)
+	local r1 = collectAll(walk.roundWalk(5, 5, 2))[1]
+	assert(r1[1][1] == 1 and r1[1][2] == 1, "TL corner (1,1)")
+	assert(r1[2][1] == 1 and r1[2][2] == 2, "side1 (1,2)")
+	assert(r1[3][1] == 1 and r1[3][2] == 3, "BL corner (1,3)")
+	assert(r1[4][1] == 2 and r1[4][2] == 3, "side2 (2,3)")
+	assert(r1[5][1] == 3 and r1[5][2] == 3, "BR corner (3,3)")
+	assert(r1[6][1] == 3 and r1[6][2] == 2, "side3 (3,2)")
+	assert(r1[7][1] == 3 and r1[7][2] == 1, "TR corner (3,1)")
+	assert(r1[8][1] == 2 and r1[8][2] == 1, "side4 (2,1)")
+end)
+
+test("roundWalk: side 1 walks downward", function()
+	-- vW=vH=7, rounds=3. r=2: edgeDistance=1, LR=3
+	-- r2[1]=TL corner (1,1), r2[2..4]=side1 left↓
+	local r2 = collectAll(walk.roundWalk(7, 7, 3))[2]
+	assert(r2[2][1] == 1 and r2[2][2] == 2)
+	assert(r2[3][1] == 1 and r2[3][2] == 3)
+	assert(r2[4][1] == 1 and r2[4][2] == 4)
+	-- r2[5] is BL corner (1,5)
+end)
+
+test("roundWalk: side 3 walks upward", function()
+	-- vW=vH=7, rounds=3. r=2: LR=3, TB=3.
+	-- side3 starts at TL(1)+side1(3)+BL(1)+side2(3)+BR(1)+1 = index 10
+	local r2 = collectAll(walk.roundWalk(7, 7, 3))[2]
+	assert(r2[10][1] == 5 and r2[10][2] == 4)
+	assert(r2[11][1] == 5 and r2[11][2] == 3)
+	assert(r2[12][1] == 5 and r2[12][2] == 2)
+end)
+
+-- ─── window ────────────────────────────────────────────────────────────────
+
+local function translate(iter, offX, offY)
+	return coroutine.wrap(function()
+		for coord in iter do coroutine.yield({ coord[1] - offX, coord[2] - offY }) end
+	end)
+end
+
+test("window: passes coords inside bounds and drops those outside", function()
+	local src = coroutine.wrap(function()
+		for _, c in ipairs({{ -1,0 }, { 0,0 }, { 2,2 }, { 4,4 }, { 5,0 }, { 0,5 }}) do
+			coroutine.yield(c)
+		end
+	end)
+	local result = collect(walk.window(src, 5, 5))
+	assert(#result == 3)
+	assert(result[1][1] == 0 and result[1][2] == 0)
+	assert(result[2][1] == 2 and result[2][2] == 2)
+	assert(result[3][1] == 4 and result[3][2] == 4)
+end)
+
+test("roundWalk + window: all coords within physical canvas after translation", function()
+	-- half mode: upper virtual half maps to negative y after offY=5 subtraction
+	for round in walk.roundWalk(5, 10, 1) do
+		for coord in walk.window(translate(round, 0, 5), 5, 5) do
+			assert(coord[1] >= 0 and coord[1] < 5, "x in [0,4]")
+			assert(coord[2] >= 0 and coord[2] < 5, "y in [0,4]")
+		end
 	end
 end)
 
-test("roundWalk quarter: 1 segment per round (W<vW)", function()
-	for segIter in walk.roundWalk(3, 5, 5, 10, 0, 5, 1) do
-		local t = {}
-		for seg in segIter do t[#t + 1] = seg end
-		assert(#t == 1)
+test("roundWalk + window: half mode yields 2 corners per round", function()
+	-- vW=5, vH=10, offY=5, W=5, H=5: BL and BR corners in bounds, TR and TL out
+	for round in walk.roundWalk(5, 10, 1) do
+		local coords = collect(walk.window(translate(round, 0, 5), 5, 5))
+		assert(countCorners(coords, 0, 5, 5, 10) == 2)
 	end
 end)
 
--- ─── roundWalk: side lengths ───────────────────────────────────────────────
-
-test("roundWalk: side length = vH - 2*(rounds-r) - 2 for left/right sides", function()
-	-- innerWidth=1: vW=vH=2*rounds+1, side length = 2r-1
-	local rounds = collectSegs(walk.roundWalk(7, 7, 7, 7, 0, 0, 3))
-	assert(#rounds[1][1] == 1, "r=1: n=1")
-	assert(#rounds[2][1] == 3, "r=2: n=3")
-	assert(#rounds[3][1] == 5, "r=3: n=5")
+test("roundWalk + window: quarter mode yields 1 corner per round", function()
+	-- vW=5, vH=10, offY=5, W=3, H=5: only BL corner in bounds
+	for round in walk.roundWalk(5, 10, 1) do
+		local coords = collect(walk.window(translate(round, 0, 5), 3, 5))
+		assert(countCorners(coords, 0, 5, 5, 10) == 1)
+	end
 end)
 
-test("roundWalk: innerWidth=3 gives correct side lengths (bug: was using 2r-1)", function()
-	-- vW=vH=7=3+2*2, rounds=2, innerWidth=3
-	-- r=1: k=1, n=7-2-2=3
-	-- r=2: k=0, n=7-0-2=5
-	local rounds = collectSegs(walk.roundWalk(7, 7, 7, 7, 0, 0, 2))
-	assert(#rounds[1][1] == 3, "r=1 with innerWidth=3: n=3, not 2*1-1=1")
-	assert(#rounds[2][1] == 5, "r=2 with innerWidth=3: n=5, not 2*2-1=3")
+-- ─── isCornerCoord ─────────────────────────────────────────────────────────
+
+test("isCornerCoord: detects ring corners in full 5x5 grid", function()
+	assert(walk.isCornerCoord(1, 1, 0, 0, 5, 5), "TL (1,1)")
+	assert(walk.isCornerCoord(1, 3, 0, 0, 5, 5), "BL (1,3)")
+	assert(walk.isCornerCoord(3, 3, 0, 0, 5, 5), "BR (3,3)")
+	assert(walk.isCornerCoord(3, 1, 0, 0, 5, 5), "TR (3,1)")
+	assert(not walk.isCornerCoord(1, 2, 0, 0, 5, 5), "left side — not corner")
+	assert(not walk.isCornerCoord(2, 3, 0, 0, 5, 5), "bottom side — not corner")
 end)
 
--- ─── roundWalk: coordinates ────────────────────────────────────────────────
-
--- Use innerWidth=1 (vW=2*rounds+1) for predictable coordinates.
-test("roundWalk full: side order anti-clockwise from top-left", function()
-	-- vW=vH=5, rounds=2, innerWidth=1. r=1: k=1, n=1
-	local rounds = collectSegs(walk.roundWalk(5, 5, 5, 5, 0, 0, 2))
-	local segs = rounds[1]
-	assert(segs[1][1][1] == 1 and segs[1][1][2] == 2, "side 1 left↓  (1,2)")
-	assert(segs[2][1][1] == 2 and segs[2][1][2] == 3, "side 2 bottom→(2,3)")
-	assert(segs[3][1][1] == 3 and segs[3][1][2] == 2, "side 3 right↑ (3,2)")
-	assert(segs[4][1][1] == 2 and segs[4][1][2] == 1, "side 4 top←   (2,1)")
+test("isCornerCoord: works with offset", function()
+	-- physical (0,0) + offset(1,1) → virtual (1,1): corner of 5x5
+	assert(walk.isCornerCoord(0, 0, 1, 1, 5, 5))
+	-- physical (0,1) + offset(1,1) → virtual (1,2): not corner
+	assert(not walk.isCornerCoord(0, 1, 1, 1, 5, 5))
 end)
 
-test("roundWalk full: side 1 walks downward", function()
-	-- vW=vH=7, rounds=3, innerWidth=1. r=2: k=1, n=3, left↓ from (1,2)
-	local rounds = collectSegs(walk.roundWalk(7, 7, 7, 7, 0, 0, 3))
-	local seg1 = rounds[2][1]
-	assert(seg1[1][1] == 1 and seg1[1][2] == 2)
-	assert(seg1[2][1] == 1 and seg1[2][2] == 3)
-	assert(seg1[3][1] == 1 and seg1[3][2] == 4)
-end)
-
-test("roundWalk full: side 3 walks upward", function()
-	-- vW=vH=7, rounds=3, innerWidth=1. r=2: k=1, right↑ from (5,4)
-	local rounds = collectSegs(walk.roundWalk(7, 7, 7, 7, 0, 0, 3))
-	local seg3 = rounds[2][3]
-	assert(seg3[1][1] == 5 and seg3[1][2] == 4)
-	assert(seg3[2][1] == 5 and seg3[2][2] == 3)
-	assert(seg3[3][1] == 5 and seg3[3][2] == 2)
-end)
-
--- ─── roundWalk: offset ─────────────────────────────────────────────────────
-
-test("roundWalk: offset translates virtual to physical coordinates", function()
-	-- vW=5, vH=6, offX=0, offY=3, rounds=1, innerWidth=5-2=3, innerHeight=6-2=4
-	-- r=1: k=0, left↓: virtual x=0, y=1 → physical (0-0, 1-3)=... hmm out of bounds
-	-- Let's use vW=5,vH=4,rounds=1,offY=2: innerHeight=4-2=2
-	-- r=1: k=0, nLR=4-0-2=2, left↓: virtual (0,1),(0,2) → physical (0,-1),(0,0)
-	-- Use vW=5,vH=6,rounds=2,offY=3: innerWidth=1,innerHeight=2
-	-- r=1: k=1, nLR=6-2-2=2, left↓: virtual (1,2),(1,3) → physical (1,-1),(1,0)
-	-- Simplest: full 5×5, rounds=2, offset (1,1)
-	-- numSides: W=3,H=3,vW=5,vH=5 → W<vW → numSides=1
-	-- r=1: k=1, left↓: virtual (1,2) → physical (1-1,2-1)=(0,1)
-	local rounds = collectSegs(walk.roundWalk(3, 3, 5, 5, 1, 1, 2))
-	assert(rounds[1][1][1][1] == 0 and rounds[1][1][1][2] == 1,
-		"virtual (1,2) → physical (0,1) with offset (1,1)")
+test("isCornerCoord: outermost ring corners of full 7x7 grid", function()
+	assert(walk.isCornerCoord(0, 0, 0, 0, 7, 7), "TL (0,0)")
+	assert(walk.isCornerCoord(0, 6, 0, 0, 7, 7), "BL (0,6)")
+	assert(walk.isCornerCoord(6, 6, 0, 0, 7, 7), "BR (6,6)")
+	assert(walk.isCornerCoord(6, 0, 0, 0, 7, 7), "TR (6,0)")
+	assert(not walk.isCornerCoord(0, 3, 0, 0, 7, 7), "left side mid — not corner")
 end)

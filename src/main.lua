@@ -330,18 +330,15 @@ local function exportPattern()
 
 	local defaultPath = sprite.filename:gsub("%.[^%.]+$", "_pattern.txt")
 	local optionsDialog = Dialog("Export Crochet Pattern")
-	local isRound = sprite.properties.mosaicMode == common.MODE_ROUND
-	optionsDialog:file{   id="path",            label="Save to:",           save=true, filename=defaultPath, filetypes={"txt"} }
-	             :check{  id="alternate",        label="Alternate direction:", selected=false }
-	             :check{  id="startWithCorner",  label="Start with corner:",  selected=true, visible=isRound }
-	             :button{ id="ok",              text="Export" }
-	             :button{ id="cancel",          text="Cancel" }
+	optionsDialog:file{   id="path",      label="Save to:",           save=true, filename=defaultPath, filetypes={"txt"} }
+	             :check{  id="alternate", label="Alternate direction:", selected=false }
+	             :button{ id="ok",        text="Export" }
+	             :button{ id="cancel",    text="Cancel" }
 	optionsDialog:show()
 	if not optionsDialog.data.ok then return end
 
-	local alternate       = optionsDialog.data.alternate
-	local startWithCorner = optionsDialog.data.startWithCorner
-	local outputPath      = optionsDialog.data.path
+	local alternate  = optionsDialog.data.alternate
+	local outputPath = optionsDialog.data.path
 
 	local function stitchAt(x, y)
 		return highlightCel.image:getPixel(x, y) == common.HIGHLIGHT_VALID_OVERLAY and "oc" or "sc"
@@ -368,13 +365,19 @@ local function exportPattern()
 		local offsetY       = sprite.properties.virtualOffsetY
 		label   = "Round "
 		allRows = coroutine.wrap(function()
-			for segIter in walk.roundWalk(width, height, virtualWidth, virtualHeight, offsetX, offsetY, sprite.properties.rounds) do
+			for coordIter in walk.roundWalk(virtualWidth, virtualHeight, sprite.properties.rounds) do
 				coroutine.yield(coroutine.wrap(function()
-					for coordIter in segIter do
+					local physical = coroutine.wrap(function()
 						for coord in coordIter do
+							coroutine.yield({ coord[1] - offsetX, coord[2] - offsetY })
+						end
+					end)
+					for coord in walk.window(physical, width, height) do
+						if walk.isCornerCoord(coord[1], coord[2], offsetX, offsetY, virtualWidth, virtualHeight) then
+							coroutine.yield("(sc, ch, sc)")
+						else
 							coroutine.yield(stitchAt(coord[1], coord[2]))
 						end
-						coroutine.yield("(sc, ch, sc)")
 					end
 				end))
 			end
@@ -387,10 +390,6 @@ local function exportPattern()
 		rowIndex = rowIndex + 1
 		local flat = {}
 		for instruction in instructionIter do flat[#flat + 1] = instruction end
-		-- HACK: generator always ends with a corner; rotate it to the front to start with one instead
-		if startWithCorner and label == "Round " then
-			table.insert(flat, 1, table.remove(flat))
-		end
 		if alternate and rowIndex % 2 == 0 then
 			local reversed = {}
 			for i = #flat, 1, -1 do reversed[#reversed + 1] = flat[i] end
