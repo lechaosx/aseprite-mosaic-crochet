@@ -10,7 +10,7 @@ This Aseprite plugin provides real-time highlights for overlay stitches and inva
 </table>
 
 ```
-Round 1: (sc, ch, sc, ch, sc, ch, sc, ch)
+Round 1: ([sc, ch] × 4)
 Round 2: [(sc, ch, sc), oc] × 4
 Round 3: [(sc, ch, sc), oc, sc, oc] × 4
 Round 4: [(sc, ch, sc), oc, [sc, oc] × 2] × 4
@@ -40,10 +40,9 @@ Round 15: [(sc, ch, sc), sc × 27] × 4
 
 ## Installation
 
-1. Open Aseprite.
-2. Go to **Edit > Preferences > Extensions**.
-3. Click **Add Extension** and select the folder containing this plugin, or drag and drop the `.aseprite-extension` file if available.
-4. Alternatively, place the `aseprite-mosaic-crochet` folder into your Aseprite extensions directory.
+1. Download the source zip from the [latest release](../../releases/latest).
+2. In Aseprite, go to **Edit > Preferences > Extensions**.
+3. Click **Add Extension** and select the downloaded zip.
 
 ## Usage
 

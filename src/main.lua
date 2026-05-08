@@ -416,12 +416,12 @@ local function exportPattern()
 						coroutine.yield(currentGroup)
 					end)
 
-					-- Step 5: Format groups properly
+					-- Step 5: Format groups, compressing repeated sequences within each group
 					local function formatGroup(stitchGroup)
 						if #stitchGroup == 1 then
 							return stitchGroup[1]
 						else
-							return "(" .. table.concat(stitchGroup, ", ") .. ")"
+							return "(" .. pattern.toString(pattern.compress(stitchGroup)) .. ")"
 						end
 					end
 

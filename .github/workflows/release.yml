@@ -24,18 +24,7 @@ jobs:
             | sed '/./,$!d' | sed -e :a -e '/^\s*$/{ $d; N; ba }' \
             > release_notes.txt
 
-      - name: Package extension
-        run: |
-          zip -r aseprite-mosaic-crochet.aseprite-extension \
-            package.json \
-            LICENCE.md \
-            README.md \
-            CHANGELOG.md \
-            src/ \
-            doc/
-
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release_notes.txt
-          files: aseprite-mosaic-crochet.aseprite-extension
