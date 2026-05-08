@@ -8,6 +8,8 @@
 
 local M = {}
 
+local compressMemo = {}
+
 -- Return true if flat[i .. i+period-1] repeated `count` times equals flat[i .. i+period*count-1].
 local function isRepeat(flat, i, period, count)
 	for rep = 1, count - 1 do
@@ -32,10 +34,11 @@ function M.compress(flat)
 	local n = #flat
 	if n == 0 then return {} end
 
-	local memo = {}
+	local memo = compressMemo
 
 	local function solve(i, j)
-		if memo[i] and memo[i][j] then return memo[i][j] end
+		local key = table.concat(flat, "|", i, j)
+		if memo[key] then return memo[key] end
 
 		local result = { seq = {}, cost = j - i + 1 }
 		for k = i, j do result.seq[#result.seq + 1] = flat[k] end
@@ -66,8 +69,7 @@ function M.compress(flat)
 			end
 		end
 
-		if not memo[i] then memo[i] = {} end
-		memo[i][j] = result
+		memo[key] = result
 		return result
 	end
 
