@@ -51,19 +51,20 @@ end
 -- W, H           = image dimensions
 -- getPixel(x, y) → current color index
 -- setHighlight(x, y, c) → called to write a highlight color
-function M.computeRowHighlights(W, H, getPixel, setHighlight)
+-- highlights is a flat table indexed as highlights[y * W + x], initialised to 0.
+function M.computeRowHighlights(W, H, getPixel, highlights)
 	for y = 0, H - 1 do
 		local colorIndex = M.getColorIndex(M.getRowIndex(H, y))
 		for x = 0, W - 1 do
 			if colorIndex ~= getPixel(x, y) then
 				if y <= 0 or y >= H - 1 then
-					setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+					highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
 				else
 					local innerPixel = getPixel(x, y + 1)
 					if colorIndex == innerPixel then
-						setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
-					else
-						setHighlight(x, y - 1, M.HIGHLIGHT_VALID_OVERLAY)
+						highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
+					elseif highlights[(y - 1) * W + x] ~= M.HIGHLIGHT_INVALID_PLACEMENT then
+						highlights[(y - 1) * W + x] = M.HIGHLIGHT_VALID_OVERLAY
 					end
 				end
 			end
@@ -98,7 +99,7 @@ end
 -- rounds      = number of rounds
 -- getPixel(x, y)        → current color index at physical pixel
 -- setHighlight(x, y, c) → called to write a highlight color
-function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, setHighlight)
+function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, highlights)
 	for y = 0, H - 1 do
 		for x = 0, W - 1 do
 			local vx = x + offX
@@ -112,7 +113,7 @@ function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, se
 
 				if colorIndex ~= getPixel(x, y) then
 					if minDistX == minDistY or roundFromEdge == 0 then
-						setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
+						highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
 					else
 						local stepX, stepY = 0, 0
 						if minDistX < minDistY then
@@ -131,12 +132,15 @@ function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, se
 							isSeam = neighborRFE <= roundFromEdge
 						end
 
+						local overlayIndex = (y - stepY) * W + (x - stepX)
 						if isSeam then
-							setHighlight(x - stepX, y - stepY, M.HIGHLIGHT_VALID_OVERLAY)
+							if highlights[overlayIndex] ~= M.HIGHLIGHT_INVALID_PLACEMENT then
+								highlights[overlayIndex] = M.HIGHLIGHT_VALID_OVERLAY
+							end
 						elseif colorIndex == getPixel(nx, ny) then
-							setHighlight(x, y, M.HIGHLIGHT_INVALID_PLACEMENT)
-						else
-							setHighlight(x - stepX, y - stepY, M.HIGHLIGHT_VALID_OVERLAY)
+							highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
+						elseif highlights[overlayIndex] ~= M.HIGHLIGHT_INVALID_PLACEMENT then
+							highlights[overlayIndex] = M.HIGHLIGHT_VALID_OVERLAY
 						end
 					end
 				end

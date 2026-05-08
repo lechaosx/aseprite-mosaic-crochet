@@ -42,17 +42,35 @@ local function normalizeImage(sprite, image)
 	end
 end
 
+local function makeHighlightBuffer(W, H)
+	local highlights = {}
+	for i = 0, W * H - 1 do highlights[i] = 0 end
+	return highlights
+end
+
+local function blitHighlights(highlights, W, H, highlightImage)
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			highlightImage:drawPixel(x, y, highlights[y * W + x])
+		end
+	end
+end
+
 local function updateRowHighlights(sprite, cel, highlightImage)
+	local W, H       = sprite.width, sprite.height
+	local highlights = makeHighlightBuffer(W, H)
 	common.computeRowHighlights(
-		sprite.width, sprite.height,
+		W, H,
 		function(x, y) return cel.image:getPixel(x, y) end,
-		function(x, y, c) highlightImage:drawPixel(x, y, c) end
+		highlights
 	)
+	blitHighlights(highlights, W, H, highlightImage)
 end
 
 -- Physical pixel (x, y) maps to virtual pixel (x + virtualOffsetX, y + virtualOffsetY).
 local function updateRoundHighlights(sprite, cel, highlightImage)
-	local W, H = sprite.width, sprite.height
+	local W, H       = sprite.width, sprite.height
+	local highlights = makeHighlightBuffer(W, H)
 	common.computeRoundHighlights(
 		W, H,
 		sprite.properties.virtualWidth,
@@ -61,8 +79,9 @@ local function updateRoundHighlights(sprite, cel, highlightImage)
 		sprite.properties.virtualOffsetY,
 		sprite.properties.rounds,
 		function(x, y) return cel.image:getPixel(x, y) end,
-		function(x, y, c) highlightImage:drawPixel(x, y, c) end
+		highlights
 	)
+	blitHighlights(highlights, W, H, highlightImage)
 end
 
 local activeCrochetSprite = nil

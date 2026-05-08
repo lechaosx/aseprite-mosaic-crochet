@@ -41,14 +41,23 @@ local function runHighlights(W, H, vW, vH, offX, offY, rounds, patternOverrides)
 		end
 	end
 
-	local highlights = {}
-	for y = 0, H - 1 do highlights[y] = {} end
+	local flatHighlights = {}
+	for i = 0, W * H - 1 do flatHighlights[i] = 0 end
 
 	common.computeRoundHighlights(
 		W, H, vW, vH, offX, offY, rounds,
 		function(x, y) return grid[y][x] end,
-		function(x, y, c) highlights[y][x] = c end
+		flatHighlights
 	)
+
+	local highlights = {}
+	for y = 0, H - 1 do
+		highlights[y] = {}
+		for x = 0, W - 1 do
+			local value = flatHighlights[y * W + x]
+			if value ~= 0 then highlights[y][x] = value end
+		end
+	end
 	return highlights, grid
 end
 
@@ -115,6 +124,31 @@ end)
 
 -- ─── HALF mode (vW=W, vH=2H, offX=0, offY=H) ──────────────────────────────
 -- Physical 9×6, rounds=3, innerW=3, innerH=0 → vW=9, vH=12, offX=0, offY=6
+
+test("full: adjacent wrong pixels — inner not marked INVALID on all four sides", function()
+	-- 9×9 grid, 3 rounds. For each side, the outermost pixel (RFE=0) is always INVALID.
+	-- The adjacent inner pixel (RFE=1, expects COLOR_B) flipped to COLOR_A:
+	--   its inner neighbor (RFE=2, expects COLOR_A) is correct →  valid OC candidate,
+	--   but the OC target (RFE=0) is INVALID → blocked, inner pixel gets no mark.
+	-- Regression: the old outer-pixel guard marked the inner pixel INVALID too.
+	local W, H, rounds = 9, 9, 3
+	local A, B = common.COLOR_A, common.COLOR_B
+	local hl = runHighlights(W, H, W, H, 0, 0, rounds, {
+		{0, 4, B}, {1, 4, A},  -- left side:   outer=(0,4) RFE=0, inner=(1,4) RFE=1
+		{8, 4, B}, {7, 4, A},  -- right side:  outer=(8,4) RFE=0, inner=(7,4) RFE=1
+		{4, 0, B}, {4, 1, A},  -- top side:    outer=(4,0) RFE=0, inner=(4,1) RFE=1
+		{4, 8, B}, {4, 7, A},  -- bottom side: outer=(4,8) RFE=0, inner=(4,7) RFE=1
+	})
+	assert(hl[4][0] == I, "left outer (0,4) must be INVALID")
+	assert(hl[4][1] ~= I, "left inner (1,4) must not be INVALID (regression)")
+	assert(hl[4][8] == I, "right outer (8,4) must be INVALID")
+	assert(hl[4][7] ~= I, "right inner (7,4) must not be INVALID (regression)")
+	assert(hl[0][4] == I, "top outer (4,0) must be INVALID")
+	assert(hl[1][4] ~= I, "top inner (4,1) must not be INVALID (regression)")
+	assert(hl[8][4] == I, "bottom outer (4,8) must be INVALID")
+	assert(hl[7][4] ~= I, "bottom inner (4,7) must not be INVALID (regression)")
+end)
+
 
 test("half: no highlights when pattern is correct", function()
 	local W, H, rounds = 9, 6, 3

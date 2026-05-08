@@ -67,13 +67,21 @@ end
 local function runRowHighlights(W, H, overrides)
 	local grid = makeRowGrid(W, H)
 	for _, ov in ipairs(overrides or {}) do grid[ov[2]][ov[1]] = ov[3] end
-	local hl = {}
-	for y = 0, H - 1 do hl[y] = {} end
+	local flatHighlights = {}
+	for i = 0, W * H - 1 do flatHighlights[i] = 0 end
 	common.computeRowHighlights(
 		W, H,
 		function(x, y) return grid[y][x] end,
-		function(x, y, c) hl[y][x] = c end
+		flatHighlights
 	)
+	local hl = {}
+	for y = 0, H - 1 do
+		hl[y] = {}
+		for x = 0, W - 1 do
+			local value = flatHighlights[y * W + x]
+			if value ~= 0 then hl[y][x] = value end
+		end
+	end
 	return hl
 end
 
@@ -132,6 +140,23 @@ test("computeRowHighlights: each column is independent", function()
 		assert(hl[0][x] == V, string.format("column %d: expected VALID highlight at y=0", x))
 	end
 end)
+
+test("computeRowHighlights: adjacent wrong pixels — inner is crochetable, outer is not", function()
+	-- H=5. y=1 expects COLOR_B (rowIndex=3, odd); flip to COLOR_A.
+	--       y=2 expects COLOR_A (rowIndex=2, even); flip to COLOR_B.
+	--       y=3 expects COLOR_B (rowIndex=1, odd); correct, stays.
+	-- y=1: inner y=2=COLOR_B == colorIndex(y=1)=COLOR_B → INVALID at y=1.
+	-- y=2: inner y=3=COLOR_B ≠ colorIndex(y=2)=COLOR_A → valid OC candidate,
+	--       but OC target y=1 is already INVALID → y=2 gets no mark.
+	-- Regression: the old outer-pixel guard incorrectly marked y=2 as INVALID too.
+	local hl = runRowHighlights(4, 5, {
+		{2, 1, common.COLOR_A},
+		{2, 2, common.COLOR_B},
+	})
+	assert(hl[1][2] == I, "y=1 must be INVALID (inner pixel matches expected color)")
+	assert(hl[2][2] ~= I, "y=2 must not be INVALID (regression: adjacent invalid incorrectly propagated)")
+end)
+
 
 test("getColorIndex alternates COLOR_A and COLOR_B", function()
 	assert(common.getColorIndex(0) == common.COLOR_A)
