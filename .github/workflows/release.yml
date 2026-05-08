@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          awk "/^## \[$version\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md \
+            | sed '/./,$!d' | sed -e :a -e '/^\s*$/{ $d; N; ba }' \
+            > release_notes.txt
+
+      - name: Package extension
+        run: |
+          zip -r aseprite-mosaic-crochet.aseprite-extension \
+            package.json \
+            LICENCE.md \
+            README.md \
+            CHANGELOG.md \
+            src/ \
+            doc/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.txt
+          files: aseprite-mosaic-crochet.aseprite-extension
