@@ -255,11 +255,11 @@ local function createMosaicSprite()
 			offsetX = 0;                             offsetY = 0
 		elseif sub == ROUND_SUBMODE_HALF then
 			width   = virtualWidth
-			offsetX = 0;  offsetY = math.floor(virtualHeight / 2)
+			offsetX = 0;  offsetY = data.rounds
 			height  = virtualHeight - offsetY
 		elseif sub == ROUND_SUBMODE_QUARTER then
-			width   = math.ceil(virtualWidth / 2)
-			offsetX = 0;  offsetY = math.floor(virtualHeight / 2)
+			width   = virtualWidth - data.rounds
+			offsetX = 0;  offsetY = data.rounds
 			height  = virtualHeight - offsetY
 		end
 	else
@@ -471,7 +471,7 @@ function init(plugin)
 	plugin:newCommand{
 		id="export_crochet_pattern",
 		title="Export Crochet Pattern",
-		group="file_export",
+		group="file_export_2",
 		onclick=exportPattern,
 		onenabled=function()
 			local sprite = app.sprite
