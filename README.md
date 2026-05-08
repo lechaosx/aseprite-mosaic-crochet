@@ -81,6 +81,14 @@ The output uses standard stitch abbreviations:
 - `(sc oc)` — two stitches worked into the same parent stitch (increase)
 - `sc × 6` — repeated stitch; `[sc, oc] × 4` — repeated group
 
+#### Limitations
+
+The exported pattern is intentially technique-agnostic and covers the stitch sequence only. The following must be handled manually:
+
+- **Foundation** — Depending on shape of your pattern, you can either start into magic ring, foundation chain or directly as foundation sc.
+- **Row and round ends** — For row mode, you can use COM technique. For round mode, invisible join followed by chain should be sufficient.
+- **No inner hole** - If your pattern has no inner hole, the innermost round is emitted as `(ch × 4)` — replace this with 4 sc worked into a magic ring.
+
 ## Technical Details
 
 - **Layers:**
