@@ -75,9 +75,8 @@ function M.compress(flat)
 end
 
 -- Human-readable serialization for debugging / export preview.
--- A repeat group whose body is a single stitch uses "Nsc" notation (e.g. "3sc").
--- All other groups use bracket notation without a space before ×: "[sc, dc]×4".
--- Example: "2sc, [dc, sc]×4, dc"
+-- Single-stitch repeats: "sc × 3". Multi-stitch groups: "[sc, dc] × 4".
+-- Example: "sc, sc × 3, [dc, sc] × 4, dc"
 function M.toString(seq)
 	local parts = {}
 	for _, item in ipairs(seq) do
@@ -86,7 +85,7 @@ function M.toString(seq)
 		else
 			local items, count = item[1], item[2]
 			if #items == 1 and type(items[1]) == "string" then
-				parts[#parts + 1] = count .. " " .. items[1]
+				parts[#parts + 1] = items[1] .. " × " .. count
 			else
 				parts[#parts + 1] = "[" .. M.toString(items) .. "] × " .. count
 			end
