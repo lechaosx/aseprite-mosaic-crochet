@@ -1,7 +1,11 @@
 local common  = require("src.common")
 local pattern = require("src.pattern")
+local vec2    = require("src.vec2")
 local walk    = require("src.walk")
 -- Real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet.
+
+local filter = common.filter
+local map    = common.map
 
 local function getLayerByName(sprite, name)
 	for _, l in ipairs(sprite.layers) do
@@ -340,43 +344,90 @@ local function exportPattern()
 	local alternate  = optionsDialog.data.alternate
 	local outputPath = optionsDialog.data.path
 
-	local function stitchAt(x, y)
-		return highlightCel.image:getPixel(x, y) == common.HIGHLIGHT_VALID_OVERLAY and "oc" or "sc"
+	local function stitchAt(coord)
+		return highlightCel.image:getPixel(coord.x, coord.y) == common.HIGHLIGHT_VALID_OVERLAY and "oc" or "sc"
 	end
 
-	local width, height = sprite.width, sprite.height
+	local canvasSize = vec2(sprite.width, sprite.height)
 	local allRows, label
 
 	if sprite.properties.mosaicMode == common.MODE_ROW then
 		label   = "Row "
 		allRows = coroutine.wrap(function()
-			for coordIter in walk.rowWalk(width, height) do
+			for coordIter in walk.rowWalk(canvasSize) do
 				coroutine.yield(coroutine.wrap(function()
 					for coord in coordIter do
-						coroutine.yield(stitchAt(coord[1], coord[2]))
+						coroutine.yield(stitchAt(coord))
 					end
 				end))
 			end
 		end)
 	else
-		local virtualWidth  = sprite.properties.virtualWidth
-		local virtualHeight = sprite.properties.virtualHeight
-		local offsetX       = sprite.properties.virtualOffsetX
-		local offsetY       = sprite.properties.virtualOffsetY
+		local virtualSize    = vec2(sprite.properties.virtualWidth,   sprite.properties.virtualHeight)
+		local physicalOffset = vec2(sprite.properties.virtualOffsetX, sprite.properties.virtualOffsetY)
 		label   = "Round "
 		allRows = coroutine.wrap(function()
-			for coordIter in walk.roundWalk(virtualWidth, virtualHeight, sprite.properties.rounds) do
+			for virtualPairIterator in walk.roundWalk(virtualSize, sprite.properties.rounds) do
 				coroutine.yield(coroutine.wrap(function()
-					local physical = coroutine.wrap(function()
-						for coord in coordIter do
-							coroutine.yield({ coord[1] - offsetX, coord[2] - offsetY })
-						end
+					-- Step 1: Convert virtual coordinate pairs to physical coordinate pairs
+					local physicalPairIterator = map(virtualPairIterator, function(virtualPair)
+						local virtualCoord  = virtualPair[1]
+						local virtualParent = virtualPair[2]
+						return { virtualCoord - physicalOffset, virtualParent - physicalOffset }
 					end)
-					for coord in walk.window(physical, width, height) do
-						if walk.isCornerCoord(coord[1], coord[2], offsetX, offsetY, virtualWidth, virtualHeight) then
-							coroutine.yield("(sc, ch, sc)")
+
+					-- Step 2: Filter coordinates outside the physical canvas bounds
+					local windowedPairIterator = filter(physicalPairIterator, function(physicalPair)
+						return walk.window(physicalPair[1], canvasSize)
+					end)
+
+					-- Step 3: Convert physical coordinates to stitches, preserving parent coordinates
+					local stitchWithParentIterator = map(windowedPairIterator, function(physicalPair)
+						local physicalCoord       = physicalPair[1]
+						local physicalParentCoord = physicalPair[2]
+						local stitch
+						if walk.isCornerCoord(physicalCoord, physicalOffset, virtualSize) then
+							stitch = "ch"
 						else
-							coroutine.yield(stitchAt(coord[1], coord[2]))
+							stitch = stitchAt(physicalCoord)
+						end
+						return { stitch, physicalParentCoord }
+					end)
+
+					-- Step 4: Group consecutive stitches worked into the same parent stitch
+					local groupsIterator = coroutine.wrap(function()
+						local currentGroup       = {}
+						local currentParentCoord = nil
+
+						for stitchWithParent in stitchWithParentIterator do
+							local stitch      = stitchWithParent[1]
+							local parentCoord = stitchWithParent[2]
+
+							if parentCoord ~= currentParentCoord then
+								coroutine.yield(currentGroup)
+
+								currentGroup       = {}
+								currentParentCoord = parentCoord
+							end
+
+							currentGroup[#currentGroup + 1] = stitch
+						end
+
+						coroutine.yield(currentGroup)
+					end)
+
+					-- Step 5: Format groups properly
+					local function formatGroup(stitchGroup)
+						if #stitchGroup == 1 then
+							return stitchGroup[1]
+						else
+							return "(" .. table.concat(stitchGroup, ", ") .. ")"
+						end
+					end
+
+					for currentGroup in groupsIterator do
+						if #currentGroup > 0 then
+							coroutine.yield(formatGroup(currentGroup))
 						end
 					end
 				end))

@@ -1,5 +1,25 @@
 local M = {}
 
+-- Iterator utilities
+
+function M.filter(sourceIterator, predicate)
+	return coroutine.wrap(function()
+		for currentItem in sourceIterator do
+			if predicate(currentItem) then
+				coroutine.yield(currentItem)
+			end
+		end
+	end)
+end
+
+function M.map(sourceIterator, transformFunction)
+	return coroutine.wrap(function()
+		for currentItem in sourceIterator do
+			coroutine.yield(transformFunction(currentItem))
+		end
+	end)
+end
+
 -- Colors
 M.COLOR_TRANSPARENT = 0
 M.COLOR_A = 1
