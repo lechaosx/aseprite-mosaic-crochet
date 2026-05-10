@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-05-10
+
+### Changed
+- Pattern compression algorithm rewritten to match the Rust core in the companion web editor. Replaced the recursive memoised DP (string-key memo table, O(n) `isRepeat` scan per period) with an iterative bottom-up DP using an LCE (longest-common-extension) table for O(1) periodicity checks, Fine–Wilf break after the first valid period, and branch-and-bound split pruning. Output is identical; the new version is substantially faster on large patterns.
+
 ## [1.2.1] - 2026-05-08
 
 ### Fixed
