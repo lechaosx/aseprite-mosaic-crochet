@@ -2,6 +2,8 @@
 
 This Aseprite plugin provides real-time highlights for overlay stitches and invalid overlay placements for inset mosaic crochet patterns.
 
+Companion to the [Mosaic Crochet Web editor](https://github.com/lechaosx/mosaic-crochet-editor) — a standalone browser-based version of the same tool.
+
 <table>
 <tr>
 <td><img src="doc/screenshot.png" alt="Pattern open in Aseprite with overlay highlights"></td>
