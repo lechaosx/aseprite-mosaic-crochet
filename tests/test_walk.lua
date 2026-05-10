@@ -215,3 +215,4 @@ test("isCornerCoord: outermost ring corners of full 7x7 grid", function()
 	assert(walk.isCornerCoord(vec2(6, 0), noOffset, gridSize), "TR (6,0)")
 	assert(not walk.isCornerCoord(vec2(0, 3), noOffset, gridSize), "left side mid — not corner")
 end)
+

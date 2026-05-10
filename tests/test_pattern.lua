@@ -1,9 +1,9 @@
 -- Run with: lua tests/test_pattern.lua
 -- from the extension root directory.
 
-local P = require("src.pattern")
+local P         = require("src.pattern")
 local framework = require("tests.framework")
-local test = framework.test
+local test      = framework.test
 
 -- ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -276,4 +276,25 @@ end)
 test("toString: mixed flat and grouped", function()
 	assert(P.toString({ "sc", { { "dc", { { "sc" }, 2 } }, 3 }, "dc" })
 		== "sc, [dc, sc × 2] × 3, dc")
+end)
+
+-- ─── round export: stitch sequence compression ───────────────────────────
+-- These test the specific stitch sequences that Round 1 produces in round
+-- mode, verifying that pattern.compress handles them correctly.
+-- The sequences are hard-coded from known export outputs, not re-derived
+-- from the walk (which is already covered by test_walk.lua).
+
+-- innerW=1, innerH=1, rounds=2: innermost ring has 8 stitches alternating
+-- non-corner (sc) and corner (ch) → [sc, ch] × 4.
+test("compress: round-1 sequence sc,ch,sc,ch,sc,ch,sc,ch → [sc, ch] × 4", function()
+	local seq = { "sc","ch","sc","ch","sc","ch","sc","ch" }
+	assert(P.toString(P.compress(seq)) == "[sc, ch] × 4",
+		"got: " .. P.toString(P.compress(seq)))
+end)
+
+-- innerW=0, innerH=0, rounds=1: innermost ring has 4 corners → ch × 4.
+test("compress: round-1 sequence ch,ch,ch,ch → ch × 4", function()
+	local seq = { "ch","ch","ch","ch" }
+	assert(P.toString(P.compress(seq)) == "ch × 4",
+		"got: " .. P.toString(P.compress(seq)))
 end)
