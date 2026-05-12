@@ -105,11 +105,12 @@ test("computeRowHighlights: overlay on top edge (y=0) is invalid", function()
 	assert(hl[0][2] == I, "top-edge overlay must be INVALID")
 end)
 
-test("computeRowHighlights: overlay on bottom edge (y=H-1) is invalid", function()
+test("computeRowHighlights: foundation overlay is valid", function()
 	local H = 4
-	-- y=H-1=3: rowIndex=0 (even) → COLOR_A. Flip to COLOR_B.
+	-- y=H-1 (foundation) wrong → no inner row to clash with → VALID overlay
+	-- at the row above (y-1 = H-2).
 	local hl = runRowHighlights(4, H, { {2, H-1, common.COLOR_B} })
-	assert(hl[H-1][2] == I, "bottom-edge overlay must be INVALID")
+	assert(hl[H-2][2] == V, "foundation overlay must be VALID at y=H-2")
 end)
 
 test("computeRowHighlights: valid overlay highlights the row above", function()
@@ -121,12 +122,13 @@ test("computeRowHighlights: valid overlay highlights the row above", function()
 end)
 
 test("computeRowHighlights: invalid when inner pixel matches expected color", function()
-	-- H=3: y=1 (middle), colorIndex=getColorIndex(getRowIndex(3,1))=getColorIndex(1)=COLOR_B.
-	-- Force inner pixel y=2 to COLOR_B (= colorIndex) and flip y=1 to COLOR_A (overlay).
-	-- y=2 is the bottom edge, so its own overlay produces INVALID at y=2, not at y=1.
-	-- At y=1: inner=COLOR_B=colorIndex → INVALID at (2,1).
+	-- H=3: y=1 (middle) wrong (A instead of B). Inner pixel y=2 forced to B
+	-- (= colorIndex of y=1) → clash → INVALID at the wrong cell (y=1). The
+	-- foundation y=2 is also wrong → it would write VALID at the overlay
+	-- target (y=1), but the precedence check defers to the existing INVALID,
+	-- so hl[1][2] stays INVALID.
 	local hl = runRowHighlights(4, 3, { {2, 1, common.COLOR_A}, {2, 2, common.COLOR_B} })
-	assert(hl[1][2] == I, "overlay with inner pixel matching expected color must be INVALID")
+	assert(hl[1][2] == I, "clash must produce INVALID at the wrong cell")
 end)
 
 test("computeRowHighlights: each column is independent", function()

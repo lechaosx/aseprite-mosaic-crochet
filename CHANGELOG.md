@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-05-12
+
+### Changed
+- Foundation row (the bottom row in row mode) is now treated as always overlay-able. A non-natural colour in the foundation now produces a **blue** highlight on the row above (a valid overlay) instead of a **red** highlight at the foundation cell itself. Rationale: the foundation has no inner row to clash with, so any colour there is a valid overlay onto the row above.
+
 ## [1.2.2] - 2026-05-10
 
 ### Changed

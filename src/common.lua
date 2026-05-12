@@ -57,9 +57,22 @@ function M.computeRowHighlights(W, H, getPixel, highlights)
 		local colorIndex = M.getColorIndex(M.getRowIndex(H, y))
 		for x = 0, W - 1 do
 			if colorIndex ~= getPixel(x, y) then
-				if y <= 0 or y >= H - 1 then
+				if y == 0 then
+					-- Top row: always INVALID (no row above to host an
+					-- overlay). Marker stays at the wrong cell.
 					highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
+				elseif y == H - 1 then
+					-- Foundation: always VALID (no inner row to clash with).
+					-- Marker lives on the overlay row above. Precedence
+					-- defers to a mid-pattern INVALID already at that row.
+					local overlayIndex = (y - 1) * W + x
+					if highlights[overlayIndex] ~= M.HIGHLIGHT_INVALID_PLACEMENT then
+						highlights[overlayIndex] = M.HIGHLIGHT_VALID_OVERLAY
+					end
 				else
+					-- Mid-pattern: clash → INVALID at the wrong cell; no clash
+					-- → VALID at the overlay row above (precedence defers to
+					-- a top-row INVALID already at row 0).
 					local innerPixel = getPixel(x, y + 1)
 					if colorIndex == innerPixel then
 						highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
@@ -112,6 +125,13 @@ function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, hi
 				local colorIndex = M.getColorIndex(rounds - 1 - roundFromEdge)
 
 				if colorIndex ~= getPixel(x, y) then
+					-- Outermost ring or corner (diagonal cell): INVALID at
+					-- the wrong cell. Aseprite renders the highlights layer
+					-- directly with no shift transform, so storing INVALID at
+					-- the outward target would either fall outside the canvas
+					-- (outermost) or split awkwardly across two cells
+					-- (corner). The wrong cell is always inside the canvas
+					-- and reads cleanly.
 					if minDistX == minDistY or roundFromEdge == 0 then
 						highlights[y * W + x] = M.HIGHLIGHT_INVALID_PLACEMENT
 					else
@@ -132,6 +152,10 @@ function M.computeRoundHighlights(W, H, vW, vH, offX, offY, rounds, getPixel, hi
 							isSeam = neighborRFE <= roundFromEdge
 						end
 
+						-- VALID marker lives on the overlay ring above
+						-- (overlay_target = (x - stepX, y - stepY)); INVALID
+						-- stays at the wrong cell (same reasoning as the
+						-- outermost/corner case).
 						local overlayIndex = (y - stepY) * W + (x - stepX)
 						if isSeam then
 							if highlights[overlayIndex] ~= M.HIGHLIGHT_INVALID_PLACEMENT then
